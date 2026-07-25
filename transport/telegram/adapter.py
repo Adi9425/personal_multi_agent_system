@@ -2,15 +2,15 @@ import logging
 from datetime import datetime, timezone
 
 from aiogram import Bot, Dispatcher
-from aiogram.types import Message, Update
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.logging_config import configure_logging
-from core.schemas import JobPayload
+from core.schemas import JobPayload, Reply
 from db.models import ProcessedUpdate
 from db.session import async_session
-from workers.queue import get_pool
+from workers.pool import get_pool
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -60,6 +60,19 @@ async def on_message(message: Message, event_update: Update) -> None:
         text=message.text,
         update_id=event_update.update_id,
     )
+
+
+async def send_reply(chat_id: int, reply: Reply) -> None:
+    """The other half of the D6 boundary: agent/worker code produces a transport-neutral
+    Reply, this is the one place that turns it into an actual Telegram call."""
+    markup = None
+    if reply.buttons:
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=b.label, callback_data=b.callback_data)] for b in reply.buttons
+            ]
+        )
+    await bot.send_message(chat_id, reply.text, reply_markup=markup)
 
 
 async def run_polling() -> None:

@@ -1,31 +1,32 @@
+import asyncio
 import logging
-
-from arq import ArqRedis, create_pool
-from arq.connections import RedisSettings
 
 from app.config import settings
 from app.logging_config import configure_logging
+from core.schemas import JobPayload, Reply
+from workers.pool import REDIS_SETTINGS
 
 configure_logging()
 logger = logging.getLogger(__name__)
 
-REDIS_SETTINGS = RedisSettings.from_dsn(settings.redis_url)
-
-_pool: ArqRedis | None = None
-
-
-async def get_pool() -> ArqRedis:
-    """Shared producer-side pool — used by the Telegram adapter to enqueue jobs."""
-    global _pool
-    if _pool is None:
-        _pool = await create_pool(REDIS_SETTINGS)
-    return _pool
-
 
 async def handle_message(ctx, payload: dict) -> None:
-    """Step 5: still a placeholder — just proves whitelist/dedupe/enqueue wiring.
-    Step 7 replaces this body with the real echo send."""
-    logger.info("received job payload: %s", payload)
+    # Deferred import: transport.telegram.adapter imports workers.pool (producer side),
+    # so importing adapter at module load time here would be circular.
+    from transport.telegram.adapter import send_reply
+
+    job = JobPayload.model_validate(payload)
+
+    if settings.worker_test_delay_seconds:
+        logger.info(
+            "test delay: sleeping %ss before send (update_id=%s)",
+            settings.worker_test_delay_seconds,
+            job.update_id,
+        )
+        await asyncio.sleep(settings.worker_test_delay_seconds)
+
+    await send_reply(job.chat_id, Reply(text=f"echo: {job.text}"))
+    logger.info("sent echo reply for update_id=%s", job.update_id)
 
 
 class WorkerSettings:
