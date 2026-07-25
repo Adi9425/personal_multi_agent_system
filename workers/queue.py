@@ -32,3 +32,7 @@ async def handle_message(ctx, payload: dict) -> None:
 class WorkerSettings:
     functions = [handle_message]
     redis_settings = REDIS_SETTINGS
+    # Phase 1 jobs are near-instant (echo only) — arq's 300s default lease would make a
+    # crashed-worker's job sit orphaned for ~5 minutes before redelivery. 30s is generous
+    # for this workload; revisit once real LLM calls (Phase 3+) can legitimately run longer.
+    job_timeout = 30
