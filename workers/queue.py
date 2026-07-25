@@ -4,9 +4,10 @@ from arq import ArqRedis, create_pool
 from arq.connections import RedisSettings
 
 from app.config import settings
+from app.logging_config import configure_logging
 
-logger = logging.getLogger("worker")
-logging.basicConfig(level=logging.INFO)
+configure_logging()
+logger = logging.getLogger(__name__)
 
 REDIS_SETTINGS = RedisSettings.from_dsn(settings.redis_url)
 

@@ -6,13 +6,14 @@ from aiogram.types import Message, Update
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
+from app.logging_config import configure_logging
 from core.schemas import JobPayload
 from db.models import ProcessedUpdate
 from db.session import async_session
 from workers.queue import get_pool
 
-logger = logging.getLogger("telegram_adapter")
-logging.basicConfig(level=logging.INFO)
+configure_logging()
+logger = logging.getLogger(__name__)
 
 bot = Bot(token=settings.telegram_bot_token)
 dispatcher = Dispatcher()
