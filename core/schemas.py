@@ -80,3 +80,16 @@ class CapturedEntry(BaseModel):
         if value < now - timedelta(days=1):
             raise ValueError("due_at is more than 1 day in the past")
         return value
+
+
+class QueryPlan(BaseModel):
+    search_text: str | None = None
+    category: EntryCategory | None = None
+    status: EntryStatus | None = None
+    due_before: datetime | None = None
+    completed_after: datetime | None = None
+    limit: int = 10
+
+
+class AnswerSynthesis(BaseModel):
+    answer: str = Field(max_length=500)

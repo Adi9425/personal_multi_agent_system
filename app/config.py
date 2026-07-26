@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     langfuse_secret_key: str
     langfuse_host: str = "https://cloud.langfuse.com"
 
+    # §6.4 — near-inert at low volume; raise as the corpus grows. Both live here, not
+    # hardcoded in the query, so tuning is a config change rather than a rescoring exercise.
+    recency_weight: float = 0.005
+    recency_halflife_days: int = 30
+
     @property
     def allowed_chat_ids(self) -> set[int]:
         return {int(cid.strip()) for cid in self.telegram_allowed_chat_ids.split(",") if cid.strip()}
