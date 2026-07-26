@@ -79,9 +79,11 @@ async def query(*, user_id: int, text: str) -> Reply:
     synthesis = await call_structured(
         model=settings.model_strong,
         system=(
-            "Answer the user's question using ONLY the numbered entries below. Be concise "
-            "and specific (mention titles/dates where relevant). If the entries don't "
-            "actually answer the question, say so plainly.\n\n"
+            "Answer the user's question using ONLY the numbered entries below. One or two "
+            "plain sentences, direct and conversational — no markdown, no bullet points, no "
+            "numbered lists, no restating the entries one by one (they're shown to the user "
+            "separately right after your answer, in a fixed format you don't control). If "
+            "the entries don't actually answer the question, say so plainly.\n\n"
             f"Entries:\n{rows_summary}"
         ),
         user=text,
@@ -89,5 +91,7 @@ async def query(*, user_id: int, text: str) -> Reply:
         trace_name="query-synthesize-answer",
     )
 
+    # The entries list is always rendered here, deterministically — never left to the LLM's
+    # own (inconsistent) formatting.
     sources = "\n".join(f"{i}. {_format_source(r)}" for i, r in enumerate(rows, start=1))
-    return Reply(text=f"{synthesis.answer}\n\nSources:\n{sources}")
+    return Reply(text=f"{synthesis.answer}\n\n{sources}")
