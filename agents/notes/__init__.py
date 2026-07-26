@@ -5,6 +5,7 @@ from core.schemas import IntentResult, Reply
 from services.llm import LLMValidationError, call_structured
 
 from agents.notes.capture import capture
+from agents.notes.query import query
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,15 @@ async def handle(user_id: int, text: str, msg_id: int) -> Reply:
             logger.warning("capture extraction failed validation twice for msg_id=%s", msg_id)
             return Reply(text="I had trouble understanding the details — could you rephrase?")
 
+    if intent.action == "query":
+        try:
+            return await query(user_id=user_id, text=text)
+        except LLMValidationError:
+            logger.warning("query handling failed validation twice for msg_id=%s", msg_id)
+            return Reply(text="I had trouble understanding that question — could you rephrase?")
+
     if intent.action == "unknown":
         return Reply(text="I'm not sure what you'd like me to do with that.")
 
-    # update / query — not built until Phases 4/5.
+    # update — not built until Phase 5.
     return Reply(text=f"I can't handle {intent.action}s yet — that's coming in a later phase.")
