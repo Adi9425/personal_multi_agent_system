@@ -93,3 +93,18 @@ class QueryPlan(BaseModel):
 
 class AnswerSynthesis(BaseModel):
     answer: str = Field(max_length=500)
+
+
+class UpdateRequest(BaseModel):
+    target_hint: str  # the phrase identifying which entry
+    operation: Literal["complete", "reopen", "set_due", "add_tag", "retitle", "archive"]
+    value: str | None = None  # new due date (ISO) / tag / title, if applicable
+
+
+class CallbackPayload(BaseModel):
+    callback_query_id: str
+    user_id: int
+    chat_id: int
+    message_id: int
+    token: str  # lookup key into services/pending_actions.py's Redis store
+    conversation_id: str  # D10 — unused downstream, same as JobPayload

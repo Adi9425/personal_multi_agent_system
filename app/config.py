@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # the eval set as real usage data accumulates, same philosophy as AUTO_THRESHOLD in §6.2.
     min_vector_similarity: float = 0.5
 
+    # §6.2 — tune against the eval set, not vibes. Scores are normalized against the
+    # theoretical max fused score (see agents/notes/resolve.py) before comparing to these.
+    auto_threshold: float = 0.75
+    gap_threshold: float = 0.15
+
     @property
     def allowed_chat_ids(self) -> set[int]:
         return {int(cid.strip()) for cid in self.telegram_allowed_chat_ids.split(",") if cid.strip()}
