@@ -10,11 +10,20 @@ from agents.notes.query import query
 logger = logging.getLogger(__name__)
 
 INTENT_SYSTEM_PROMPT = (
-    "Classify the user's message into exactly one intent:\n"
-    "- capture: they want to save a new note or task.\n"
-    "- update: they want to modify or complete an existing entry.\n"
-    "- query: they're asking a question about existing entries.\n"
-    "- unknown: none of the above clearly apply.\n"
+    "Classify the user's message into exactly one intent, for a personal notes/tasks bot:\n\n"
+    "- capture: the user is telling you something to remember — a new note, fact, task, or "
+    "idea. This is the default for any statement of information, even with no explicit "
+    '"note" or "remember" framing (e.g. "stateless auth tokens carry an expiry claim and '
+    'get validated without a server-side session store" is capture, not a question and not '
+    "unknown — it's a fact the user wants saved).\n"
+    "- update: the user references an existing saved entry and wants it changed (e.g. \"mark "
+    'the timesheet as done", "push the passport renewal to next month").\n'
+    "- query: the user is asking a question ABOUT their existing saved entries (e.g. \"what "
+    'do I have open this week", "notes about JWT").\n'
+    "- unknown: only for greetings, small talk, or messages with no notes/tasks-related "
+    'content at all (e.g. "hello", "lol").\n\n'
+    "When genuinely unsure between capture and unknown, prefer capture — most messages sent "
+    "to this bot are things the user wants saved.\n"
     "Respond with your confidence (0-1) and a short reason."
 )
 
