@@ -34,6 +34,7 @@ async def hybrid_search(
     user_id: int,
     plan: QueryPlan,
     query_embedding: list[float] | None,
+    apply_similarity_floor: bool = True,
 ) -> list[dict]:
     params = {
         "user_id": user_id,
@@ -62,7 +63,16 @@ async def hybrid_search(
 
     if query_embedding is not None:
         params["query_embedding"] = _vector_literal(query_embedding)
-        params["min_similarity"] = settings.min_vector_similarity
+        # §6.2's "else: closest 2" fallback for update-resolution needs candidates even when
+        # nothing is a genuinely good match — Phase 4's floor is correct for search (showing
+        # nothing beats showing junk) but wrong for that fallback, so resolve.py opts out.
+        floor_clause = ""
+        if apply_similarity_floor:
+            params["min_similarity"] = settings.min_vector_similarity
+            floor_clause = f"""
+                  AND 1 - (embedding <=> CAST(:query_embedding AS vector({settings.embedding_dim})))
+                      > :min_similarity
+            """
         vec_cte = f"""
             vec AS (
                 SELECT id, row_number() OVER (
@@ -70,8 +80,7 @@ async def hybrid_search(
                 ) AS rank_vec
                 FROM filtered
                 WHERE embedding IS NOT NULL
-                  AND 1 - (embedding <=> CAST(:query_embedding AS vector({settings.embedding_dim})))
-                      > :min_similarity
+                {floor_clause}
             ),
         """
         vec_score = "COALESCE(1.0 / (60 + vec.rank_vec), 0)"
