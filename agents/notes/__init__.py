@@ -18,15 +18,19 @@ INTENT_SYSTEM_PROMPT = (
 )
 
 
+async def classify_intent(text: str) -> IntentResult:
+    return await call_structured(
+        model=settings.model_fast,
+        system=INTENT_SYSTEM_PROMPT,
+        user=text,
+        response_model=IntentResult,
+        trace_name="classify-intent",
+    )
+
+
 async def handle(user_id: int, text: str, msg_id: int) -> Reply:
     try:
-        intent = await call_structured(
-            model=settings.model_fast,
-            system=INTENT_SYSTEM_PROMPT,
-            user=text,
-            response_model=IntentResult,
-            trace_name="classify-intent",
-        )
+        intent = await classify_intent(text)
     except LLMValidationError:
         logger.warning("intent classification failed validation twice for msg_id=%s", msg_id)
         return Reply(text="Sorry, I couldn't understand that — could you rephrase?")

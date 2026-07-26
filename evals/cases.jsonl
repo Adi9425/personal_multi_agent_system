@@ -1,0 +1,20 @@
+{"id": "cap-001", "text": "submit timesheet by friday", "expect": {"action": "capture", "category": "office_work", "kind": "task", "has_due": true}}
+{"id": "cap-002", "text": "buy milk and eggs", "expect": {"action": "capture", "category": "personal", "kind": "task", "has_due": false}}
+{"id": "cap-003", "text": "idea: build a chrome extension that summarizes long threads", "expect": {"action": "capture", "category": "ideas", "kind": "note", "has_due": false}}
+{"id": "cap-004", "text": "finish the sql course on udemy this month", "expect": {"action": "capture", "category": "self_learning", "kind": "task", "has_due": true}}
+{"id": "cap-005", "text": "call mom tomorrow evening", "expect": {"action": "capture", "category": "personal", "kind": "task", "has_due": true}}
+{"id": "cap-006", "text": "notes about jwt: they expire based on exp claim, stateless auth", "expect": {"action": "capture", "category": "self_learning", "kind": "note", "has_due": false}}
+{"id": "cap-007", "text": "intuit recruiter follow up next friday", "expect": {"action": "capture", "category": "office_work", "kind": "task", "has_due": true}}
+{"id": "cap-008", "text": "read atomic habits", "expect": {"action": "capture", "category": "self_learning", "kind": "task", "has_due": false}}
+{"id": "cap-009", "text": "renew passport before it expires in december", "expect": {"action": "capture", "category": "personal", "kind": "task", "has_due": true}}
+{"id": "cap-010", "text": "office standup notes: discussed q3 roadmap, blockers on api migration", "expect": {"action": "capture", "category": "office_work", "kind": "note", "has_due": false}}
+{"id": "cap-011", "text": "in 3 days submit expense report", "expect": {"action": "capture", "category": "office_work", "kind": "task", "has_due": true}}
+{"id": "cap-012", "text": "idea for weekend project - home automation with esp32", "expect": {"action": "capture", "category": "ideas", "kind": "note", "has_due": false}}
+{"id": "cap-013", "text": "pay electricity bill by the 5th", "expect": {"action": "capture", "category": "personal", "kind": "task", "has_due": true}}
+{"id": "cap-014", "text": "learn how the transformer attention mechanism works", "expect": {"action": "capture", "category": "self_learning", "kind": "task", "has_due": false}}
+{"id": "cap-015", "text": "mom bday gift dont forget", "expect": {"action": "capture", "category": "personal", "kind": "task", "has_due": false}}
+{"id": "upd-001", "text": "mark the intuit follow up as done", "expect": {"action": "update", "operation": "complete"}}
+{"id": "upd-002", "text": "change the passport renewal date to next month", "expect": {"action": "update", "operation": "set_due"}}
+{"id": "upd-003", "text": "the timesheet task is finished", "expect": {"action": "update", "operation": "complete"}}
+{"id": "qry-001", "text": "what do i have open this week", "expect": {"action": "query", "status": "open", "has_due_filter": true}}
+{"id": "qry-002", "text": "show me notes about jwt", "expect": {"action": "query", "has_due_filter": false}}

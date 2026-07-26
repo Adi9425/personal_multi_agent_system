@@ -92,11 +92,20 @@ async def call_structured(
         except ValidationError as e:
             last_error = e
             logger.warning("%s attempt %d: validation failed: %s", trace_name, attempt, e)
+            # Anthropic's protocol requires a tool_result immediately after a tool_use —
+            # a plain text follow-up message here gets rejected with a 400.
             messages = messages + [
                 {"role": "assistant", "content": response.content},
                 {
                     "role": "user",
-                    "content": f"That didn't validate: {e}. Call {tool_name} again with corrected values.",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": f"That didn't validate: {e}. Call {tool_name} again with corrected values.",
+                            "is_error": True,
+                        }
+                    ],
                 },
             ]
 

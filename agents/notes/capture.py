@@ -36,15 +36,19 @@ def _extraction_system_prompt() -> str:
     )
 
 
-async def capture(*, user_id: int, text: str, msg_id: int) -> Reply:
-    """§6.1, minus the Phase-6 Doc re-render step."""
-    captured = await call_structured(
+async def extract(text: str) -> CapturedEntry:
+    return await call_structured(
         model=settings.model_strong,
         system=_extraction_system_prompt(),
         user=text,
         response_model=CapturedEntry,
         trace_name="capture-extract",
     )
+
+
+async def capture(*, user_id: int, text: str, msg_id: int) -> Reply:
+    """§6.1, minus the Phase-6 Doc re-render step."""
+    captured = await extract(text)
 
     vector = await embed(f"{captured.title}\n{text}")
 
