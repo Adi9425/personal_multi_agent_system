@@ -1,9 +1,9 @@
 """§10: not optional, not something to add at the end. Run this on every prompt change.
 
-Only checks fields Phase 3 can actually produce: `action` for every case (intent
-classification), plus category/kind/has_due for cases whose expected action is "capture"
-(the only flow implemented so far). update/query cases still exercise the classifier —
-their deeper fields (operation, status, etc.) wait for Phases 4/5.
+Checks `action` for every case (intent classification), plus category/kind/has_due for
+capture cases and category/status/has_due_filter for query cases — the two flows actually
+implemented so far. update cases still exercise the classifier only; their deeper fields
+(operation, etc.) wait for Phase 5.
 """
 
 import asyncio
@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agents.notes import classify_intent
 from agents.notes.capture import extract
+from agents.notes.query import extract_plan
 
 CASES_PATH = Path(__file__).parent / "cases.jsonl"
 
@@ -54,6 +55,23 @@ async def run_case(case: dict) -> dict:
         if "has_due" in expect:
             actual = captured.due_at is not None
             fields["has_due"] = (expect["has_due"], actual, expect["has_due"] == actual)
+
+    if expect.get("action") == "query" and intent.action == "query":
+        try:
+            plan = await extract_plan(text)
+        except Exception as e:
+            fields["extract_plan_error"] = (None, str(e), False)
+            return {"id": case["id"], "text": text, "fields": fields}
+
+        if "category" in expect:
+            actual = plan.category.value if plan.category else None
+            fields["category"] = (expect["category"], actual, expect["category"] == actual)
+        if "status" in expect:
+            actual = plan.status.value if plan.status else None
+            fields["status"] = (expect["status"], actual, expect["status"] == actual)
+        if "has_due_filter" in expect:
+            actual = plan.due_before is not None
+            fields["has_due_filter"] = (expect["has_due_filter"], actual, expect["has_due_filter"] == actual)
 
     return {"id": case["id"], "text": text, "fields": fields}
 
