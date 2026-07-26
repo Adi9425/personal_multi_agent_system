@@ -1,4 +1,3 @@
-import enum
 import uuid
 from datetime import datetime
 
@@ -9,6 +8,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.config import settings
+from core.schemas import EntryCategory, EntryKind, EntryStatus, EventType
 
 
 class Base(DeclarativeBase):
@@ -22,32 +22,6 @@ class ProcessedUpdate(Base):
 
     update_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class EntryCategory(str, enum.Enum):
-    office_work = "office_work"
-    self_learning = "self_learning"
-    personal = "personal"
-    ideas = "ideas"
-
-
-class EntryKind(str, enum.Enum):
-    note = "note"
-    task = "task"
-
-
-class EntryStatus(str, enum.Enum):
-    open = "open"
-    done = "done"
-    archived = "archived"
-
-
-class EventType(str, enum.Enum):
-    created = "created"
-    updated = "updated"
-    completed = "completed"
-    reopened = "reopened"
-    archived = "archived"
 
 
 def _enum_values(python_enum):

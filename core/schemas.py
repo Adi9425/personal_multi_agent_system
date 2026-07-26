@@ -1,6 +1,33 @@
+import enum
 from datetime import datetime
 
 from pydantic import BaseModel
+
+
+class EntryCategory(str, enum.Enum):
+    office_work = "office_work"
+    self_learning = "self_learning"
+    personal = "personal"
+    ideas = "ideas"
+
+
+class EntryKind(str, enum.Enum):
+    note = "note"
+    task = "task"
+
+
+class EntryStatus(str, enum.Enum):
+    open = "open"
+    done = "done"
+    archived = "archived"
+
+
+class EventType(str, enum.Enum):
+    created = "created"
+    updated = "updated"
+    completed = "completed"
+    reopened = "reopened"
+    archived = "archived"
 
 
 class JobPayload(BaseModel):
