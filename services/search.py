@@ -62,6 +62,7 @@ async def hybrid_search(
 
     if query_embedding is not None:
         params["query_embedding"] = _vector_literal(query_embedding)
+        params["min_similarity"] = settings.min_vector_similarity
         vec_cte = f"""
             vec AS (
                 SELECT id, row_number() OVER (
@@ -69,6 +70,8 @@ async def hybrid_search(
                 ) AS rank_vec
                 FROM filtered
                 WHERE embedding IS NOT NULL
+                  AND 1 - (embedding <=> CAST(:query_embedding AS vector({settings.embedding_dim})))
+                      > :min_similarity
             ),
         """
         vec_score = "COALESCE(1.0 / (60 + vec.rank_vec), 0)"

@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     recency_weight: float = 0.005
     recency_halflife_days: int = 30
 
+    # Not in the HLD — added after observing that RRF's vec CTE ranked *every* row with a
+    # non-null embedding regardless of actual relevance (no similarity floor), so an unrelated
+    # entry could still show up as a "source" in a tiny corpus. 0.5 is a starting point based
+    # on one real measurement (0.617 relevant vs 0.416 unrelated, voyage-3-lite) — tune against
+    # the eval set as real usage data accumulates, same philosophy as AUTO_THRESHOLD in §6.2.
+    min_vector_similarity: float = 0.5
+
     @property
     def allowed_chat_ids(self) -> set[int]:
         return {int(cid.strip()) for cid in self.telegram_allowed_chat_ids.split(",") if cid.strip()}
