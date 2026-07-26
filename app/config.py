@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     # Sleeps before the echo send so a worker can be killed mid-job on purpose.
     worker_test_delay_seconds: int = 0
 
+    anthropic_api_key: str
+    model_fast: str = "claude-haiku-4-5-20251001"  # intent classification, query plan
+    model_strong: str = "claude-sonnet-5"  # extraction, synthesis
+
+    voyage_api_key: str
+
+    langfuse_public_key: str
+    langfuse_secret_key: str
+    langfuse_host: str = "https://cloud.langfuse.com"
+
     @property
     def allowed_chat_ids(self) -> set[int]:
         return {int(cid.strip()) for cid in self.telegram_allowed_chat_ids.split(",") if cid.strip()}
