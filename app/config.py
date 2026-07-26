@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     user_timezone: str = "Asia/Kolkata"
 
     # HLD §4 note: keep this in one config constant, not scattered across migrations.
-    # 1024 assumes Voyage voyage-3-lite (Phase 3); change to 1536 for OpenAI text-embedding-3-small.
-    embedding_dim: int = 1024
+    # 512 is voyage-3-lite's actual (fixed) output size — the HLD assumed 1024, which is
+    # wrong for this specific model (confirmed against the live Voyage API in Phase 3).
+    # Change to 1536 for OpenAI text-embedding-3-small.
+    embedding_dim: int = 512
 
     # Test aid for the Phase 1 worker-restart durability check (see acceptance criteria).
     # Sleeps before the echo send so a worker can be killed mid-job on purpose.
