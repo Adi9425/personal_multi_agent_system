@@ -13,6 +13,7 @@ from services.entries import (
     complete_entry,
     reopen_entry,
     retitle_entry,
+    revert_entry,
     set_due_entry,
 )
 from services.llm import call_structured
@@ -82,12 +83,16 @@ async def apply_operation(
     raise ValueError(f"unknown operation {operation}")
 
 
+async def undo(*, entry_id: uuid.UUID, changes: dict, source_msg_id: int | None = None):
+    return await _run(revert_entry, entry_id=entry_id, changes=changes, source_msg_id=source_msg_id)
+
+
 async def _run(fn, **kwargs):
     async with async_session() as session:
         return await fn(session, **kwargs)
 
 
-def _confirmation_text(operation: str, entry, value: str | None) -> str:
+def confirmation_text(operation: str, entry, value: str | None) -> str:
     emoji = _CONFIRM_EMOJI[operation]
     if operation == "set_due":
         tz = ZoneInfo(settings.user_timezone)
@@ -152,7 +157,7 @@ async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
             {"kind": "undo", "entry_id": str(entry.id), "changes": changes}
         )
         return Reply(
-            text=_confirmation_text(req.operation, entry, req.value),
+            text=confirmation_text(req.operation, entry, req.value),
             buttons=[Button(label="Undo", callback_data=undo_token)],
         )
 

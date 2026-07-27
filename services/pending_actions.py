@@ -29,3 +29,15 @@ async def fetch(token: str) -> dict | None:
 async def delete(token: str) -> None:
     pool = await get_pool()
     await pool.delete(_KEY_PREFIX + token)
+
+
+async def attach(token: str, extra: dict, *, ttl: int = DEFAULT_TTL_SECONDS) -> None:
+    """The token is created (and returned to the caller via a Reply's button) before the
+    message carrying it has actually been sent, so the sent message's id isn't known yet
+    (send_reply() only returns it after the fact). This merges it in once it is."""
+    data = await fetch(token)
+    if data is None:
+        return
+    data.update(extra)
+    pool = await get_pool()
+    await pool.set(_KEY_PREFIX + token, json.dumps(data), ex=ttl)
