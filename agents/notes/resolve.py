@@ -133,17 +133,27 @@ async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
     query_embedding = await embed(req.target_hint)
     plan = QueryPlan(search_text=_target_hint_search_text(req.target_hint), status=EntryStatus.open)
 
+    # Two-tier: floor ON first, so a handful of genuinely-irrelevant-but-not-worst entries
+    # (e.g. an unrelated task that just happens to rank 3rd in a noisy unfiltered list) never
+    # force-fill a disambiguation slot. Only fall back to floor-OFF for §6.2's "closest 2"
+    # message when there's truly nothing plausible at all — confirmed empirically that
+    # disabling the floor for every resolution (the original approach) let a wholly
+    # unrelated entry appear as a 3rd disambiguation candidate when only 2 real matches
+    # existed.
     async with async_session() as session:
         candidates = await hybrid_search(
-            session,
-            user_id=user_id,
-            plan=plan,
-            query_embedding=query_embedding,
-            apply_similarity_floor=False,
+            session, user_id=user_id, plan=plan, query_embedding=query_embedding, apply_similarity_floor=True
         )
 
     if not candidates:
-        return Reply(text=f"Couldn't find anything matching '{req.target_hint}'.")
+        async with async_session() as session:
+            closest = await hybrid_search(
+                session, user_id=user_id, plan=plan, query_embedding=query_embedding, apply_similarity_floor=False
+            )
+        if not closest:
+            return Reply(text=f"Couldn't find anything matching '{req.target_hint}'.")
+        hint = ", ".join(c["title"] for c in closest[:2])
+        return Reply(text=f"Couldn't find anything matching '{req.target_hint}'. Closest: {hint}")
 
     top = candidates[0]
     top_norm = float(top["score"]) / MAX_POSSIBLE_SCORE
