@@ -1,9 +1,8 @@
 """§10: not optional, not something to add at the end. Run this on every prompt change.
 
 Checks `action` for every case (intent classification), plus category/kind/has_due for
-capture cases and category/status/has_due_filter for query cases — the two flows actually
-implemented so far. update cases still exercise the classifier only; their deeper fields
-(operation, etc.) wait for Phase 5.
+capture cases, category/status/has_due_filter for query cases, and operation for update
+cases — all three flows now implemented (Phases 3-5).
 """
 
 import asyncio
@@ -17,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agents.notes import classify_intent
 from agents.notes.capture import extract
 from agents.notes.query import extract_plan
+from agents.notes.resolve import extract_update_request
 
 CASES_PATH = Path(__file__).parent / "cases.jsonl"
 
@@ -72,6 +72,16 @@ async def run_case(case: dict) -> dict:
         if "has_due_filter" in expect:
             actual = plan.due_before is not None
             fields["has_due_filter"] = (expect["has_due_filter"], actual, expect["has_due_filter"] == actual)
+
+    if expect.get("action") == "update" and intent.action == "update":
+        try:
+            req = await extract_update_request(text)
+        except Exception as e:
+            fields["extract_update_error"] = (None, str(e), False)
+            return {"id": case["id"], "text": text, "fields": fields}
+
+        if "operation" in expect:
+            fields["operation"] = (expect["operation"], req.operation, expect["operation"] == req.operation)
 
     return {"id": case["id"], "text": text, "fields": fields}
 
