@@ -101,12 +101,32 @@ def _confirmation_text(operation: str, entry, value: str | None) -> str:
     return f"{emoji} {verb}: {entry.title}"
 
 
+# target_hint is a colloquial phrase ("the intuit one", "that thing about X") — passed
+# straight through, websearch_to_tsquery ANDs every word together (confirmed empirically),
+# so filler words like "one"/"thing" silently zero out the FTS half entirely, leaving
+# ranking to noisy short-text vector similarity alone. OR-ing the meaningful words instead
+# (still via websearch_to_tsquery's own safe parsing, just with an explicit "OR" joiner) is
+# what makes FTS actually contribute a real signal for target_hint resolution. Phase 4's
+# query path is unaffected — this transform is local to resolve.py, not hybrid_search().
+_FILLER_WORDS = {
+    "the", "a", "an", "one", "ones", "thing", "things", "that", "this", "it",
+    "is", "of", "to", "for", "my", "me", "please", "task", "note", "entry",
+}
+
+
+def _target_hint_search_text(target_hint: str) -> str:
+    words = [w for w in target_hint.lower().split() if w not in _FILLER_WORDS]
+    if not words:
+        words = target_hint.lower().split()
+    return " OR ".join(words)
+
+
 async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
     """§6.2 — the hard path: extract, resolve to a specific entry (or don't guess), apply."""
     req = await extract_update_request(text)
 
     query_embedding = await embed(req.target_hint)
-    plan = QueryPlan(search_text=req.target_hint, status=EntryStatus.open)
+    plan = QueryPlan(search_text=_target_hint_search_text(req.target_hint), status=EntryStatus.open)
 
     async with async_session() as session:
         candidates = await hybrid_search(
@@ -128,11 +148,31 @@ async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
         entry, changes = await apply_operation(
             operation=req.operation, entry_id=top["id"], value=req.value, source_msg_id=msg_id
         )
-        undo_token = await pending_actions.store({"entry_id": str(entry.id), "changes": changes})
+        undo_token = await pending_actions.store(
+            {"kind": "undo", "entry_id": str(entry.id), "changes": changes}
+        )
         return Reply(
             text=_confirmation_text(req.operation, entry, req.value),
             buttons=[Button(label="Undo", callback_data=undo_token)],
         )
 
-    # Step 6 adds the disambiguation branch here.
-    return Reply(text="Multiple matches — disambiguation not yet implemented.")
+    # FR-6: up to 3 candidates as buttons, plus "None of these". Each button's callback_data
+    # is a token into pending_actions — the actual operation/value ride along so the later
+    # callback doesn't need to re-run extraction.
+    buttons = []
+    for candidate in candidates[:3]:
+        token = await pending_actions.store(
+            {
+                "kind": "disambiguation_choice",
+                "entry_id": str(candidate["id"]),
+                "operation": req.operation,
+                "value": req.value,
+                "source_msg_id": msg_id,
+            }
+        )
+        buttons.append(Button(label=candidate["title"][:60], callback_data=token))
+
+    cancel_token = await pending_actions.store({"kind": "cancel"})
+    buttons.append(Button(label="None of these", callback_data=cancel_token))
+
+    return Reply(text=f"Which one did you mean by '{req.target_hint}'?", buttons=buttons)
