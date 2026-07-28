@@ -7,9 +7,15 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     telegram_bot_token: str
-    telegram_allowed_chat_ids: str  # comma-separated, e.g. "123456789,987654321"
     telegram_webhook_secret: str = ""
     telegram_mode: Literal["polling", "webhook"] = "polling"
+
+    # Deliberately reverses the HLD's FR-16 single-chat_id whitelist — the bot now accepts
+    # any Telegram user, auto-registering them on a free trial (services/users.py). This is
+    # the ONLY identity that grants unrestricted, permanent access, bypassing trial/rate
+    # limits entirely. Comma-separated (same pattern the old whitelist var used). Never
+    # commit real values here — this repo is public; real IDs live only in .env.
+    admin_telegram_user_ids: str = ""
 
     database_url: str = "postgresql+asyncpg://notes:notes@localhost:5432/notes"
     redis_url: str = "redis://localhost:6379"
@@ -53,9 +59,20 @@ class Settings(BaseSettings):
     auto_threshold: float = 0.75
     gap_threshold: float = 0.15
 
+    # Free-trial gate (services/users.py). Not in the HLD (multi-user support is an explicit
+    # non-goal there) — added at the user's request to open this up beyond a single admin.
+    # Both dimensions checked; expired if EITHER is exceeded — the trial model itself is
+    # undecided, so this stays a tunable config pair rather than committing to one rule.
+    trial_days: int = 14
+    trial_request_limit: int = 50
+
+    # Redis fixed-window throttle (services/rate_limit.py) — independent of trial status,
+    # protects against runaway API cost from any single user hammering the bot.
+    rate_limit_max_per_minute: int = 10
+
     @property
-    def allowed_chat_ids(self) -> set[int]:
-        return {int(cid.strip()) for cid in self.telegram_allowed_chat_ids.split(",") if cid.strip()}
+    def admin_telegram_user_id_set(self) -> set[int]:
+        return {int(uid.strip()) for uid in self.admin_telegram_user_ids.split(",") if uid.strip()}
 
 
 settings = Settings()
