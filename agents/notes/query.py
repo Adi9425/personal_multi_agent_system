@@ -35,13 +35,14 @@ def _query_plan_system_prompt() -> str:
     )
 
 
-async def extract_plan(text: str) -> QueryPlan:
+async def extract_plan(text: str, *, user_id: int | None = None) -> QueryPlan:
     return await call_structured(
         model=settings.model_fast,
         system=_query_plan_system_prompt(),
         user=text,
         response_model=QueryPlan,
         trace_name="query-extract-plan",
+        user_id=user_id,
     )
 
 
@@ -58,11 +59,11 @@ def _format_source(row: dict) -> str:
 async def query(*, user_id: int, text: str) -> Reply:
     """§6.3: structured filters as SQL, hybrid ranking only if a topic is present,
     answer synthesis with citations (FR-13)."""
-    plan = await extract_plan(text)
+    plan = await extract_plan(text, user_id=user_id)
 
     query_embedding = None
     if plan.search_text:
-        query_embedding = await embed(plan.search_text)
+        query_embedding = await embed(plan.search_text, user_id=user_id, action="embed-query")
 
     async with async_session() as session:
         rows = await hybrid_search(session, user_id=user_id, plan=plan, query_embedding=query_embedding)
@@ -89,6 +90,7 @@ async def query(*, user_id: int, text: str) -> Reply:
         user=text,
         response_model=AnswerSynthesis,
         trace_name="query-synthesize-answer",
+        user_id=user_id,
     )
 
     # The entries list is always rendered here, deterministically — never left to the LLM's

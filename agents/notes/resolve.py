@@ -54,13 +54,14 @@ def _update_request_system_prompt() -> str:
     )
 
 
-async def extract_update_request(text: str) -> UpdateRequest:
+async def extract_update_request(text: str, *, user_id: int | None = None) -> UpdateRequest:
     return await call_structured(
         model=settings.model_fast,
         system=_update_request_system_prompt(),
         user=text,
         response_model=UpdateRequest,
         trace_name="resolve-extract-update-request",
+        user_id=user_id,
     )
 
 
@@ -128,9 +129,9 @@ def _target_hint_search_text(target_hint: str) -> str:
 
 async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
     """§6.2 — the hard path: extract, resolve to a specific entry (or don't guess), apply."""
-    req = await extract_update_request(text)
+    req = await extract_update_request(text, user_id=user_id)
 
-    query_embedding = await embed(req.target_hint)
+    query_embedding = await embed(req.target_hint, user_id=user_id, action="embed-resolve")
     plan = QueryPlan(search_text=_target_hint_search_text(req.target_hint), status=EntryStatus.open)
 
     # Two-tier: floor ON first, so a handful of genuinely-irrelevant-but-not-worst entries
