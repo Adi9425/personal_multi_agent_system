@@ -9,7 +9,7 @@ from app.logging_config import configure_logging
 from core.schemas import Button, CallbackPayload, JobPayload, Reply
 from db.models import EntryCategory, EntryKind
 from db.session import async_session
-from services import pending_actions
+from services import kv_notes, pending_actions
 from services.entries import create_entry, list_recent
 from workers.pool import REDIS_SETTINGS
 
@@ -44,7 +44,13 @@ async def _build_reply(job: JobPayload) -> Reply:
             )
         return Reply(text=f"saved: {entry.title}")
 
-    # Phase 3: plain messages (no slash command) route to LLM-driven capture.
+    # Zero-LLM fast path for "save X: Y" / "what's X" style messages — falls through
+    # (returns None) if the message doesn't match, or if a "what's X" finds nothing.
+    kv_reply = await kv_notes.try_handle(job.user_id, text)
+    if kv_reply is not None:
+        return kv_reply
+
+    # Phase 3: plain messages (no slash command, no KV match) route to LLM-driven capture.
     return await agents.notes.handle(user_id=job.user_id, text=job.text, msg_id=job.msg_id)
 
 

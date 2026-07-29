@@ -10,11 +10,28 @@ from db.session import async_session
 # going through the real LLM capture flow (with due dates, categories, etc.). "save"/
 # "remember" (writing) and "what's"/"what is" (reading) are unambiguous by comparison — a
 # real capture/query essentially never starts with those exact words.
+#
+# Key always comes first ("save my linkedin profile: URL" / "... as URL" / "... is URL") —
+# tried treating "as" as reversed (file-save convention: "save X as Y" = content X, label
+# Y), but real testing showed that's wrong for how this actually gets phrased ("save my
+# linkedin profile as https://...") — key-first for every separator matches actual usage.
+#
+# ":"/"=" must be followed by whitespace — otherwise a URL's own "https:" or a query
+# string's "?x=1" gets misread as the separator (a real bug found in testing, since URLs are
+# the single most common thing this feature is used to save).
 SAVE_PATTERN = re.compile(
-    r"^(?:save|remember)\s+(?P<key>.+?)\s*(?:\bas\b|\bis\b|\bto\b|:|=)\s*(?P<value>.+)$",
+    r"^(?:save|remember)\s+(?P<key>.+?)\s*(?:\bas\b|\bis\b|\bto\b|:\s+|=\s+)(?P<value>.+)$",
     re.IGNORECASE,
 )
 GET_PATTERN = re.compile(r"^what(?:'s|\s+is)\s+(?P<key>.+?)\??$", re.IGNORECASE)
+
+# A key that's JUST a bare pronoun ("save this as ...", "remember that is ...") is almost
+# always a parsing artifact of a run-on sentence with no real separator between a filler
+# word and the intended label ("save this as my linked profile <url>" — "this" is not the
+# label), not a genuine intended key. Rejecting these sends the message through the LLM
+# fallback instead of committing a wrong save — matches the "prefer not matching over
+# producing wrong data" rule already used elsewhere in this file.
+_BARE_PRONOUN_KEYS = {"this", "that", "it"}
 
 
 def _normalize_key(key: str) -> str:
@@ -53,6 +70,8 @@ async def try_handle(user_id: int, text: str) -> Reply | None:
     if save_match:
         key = save_match.group("key").strip()
         value = save_match.group("value").strip()
+        if _normalize_key(key) in _BARE_PRONOUN_KEYS:
+            return None
         await save(user_id, key, value)
         return Reply(text=f"Saved: {key} = {value}")
 
