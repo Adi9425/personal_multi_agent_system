@@ -44,9 +44,10 @@ async def _build_reply(job: JobPayload) -> Reply:
             )
         return Reply(text=f"saved: {entry.title}")
 
-    # Zero-LLM fast path for "save X: Y" / "what's X" style messages — falls through
-    # (returns None) if the message doesn't match, or if a "what's X" finds nothing.
-    kv_reply = await kv_notes.try_handle(job.user_id, text)
+    # Zero-LLM-first fast path for "save X: Y" messages — falls back to a cheap LLM
+    # extractor for messy phrasing, but a save/remember trigger always ends here (never the
+    # general capture pipeline below). Returns None only if there's no trigger at all.
+    kv_reply = await kv_notes.try_handle_save(job.user_id, text, job.msg_id)
     if kv_reply is not None:
         return kv_reply
 

@@ -15,6 +15,7 @@ class EntryCategory(str, enum.Enum):
 class EntryKind(str, enum.Enum):
     note = "note"
     task = "task"
+    fact = "fact"
 
 
 class EntryStatus(str, enum.Enum):
@@ -86,6 +87,11 @@ class CapturedEntry(BaseModel):
         if value < now - timedelta(days=1):
             raise ValueError("due_at is more than 1 day in the past")
         return value
+
+
+class FactExtraction(BaseModel):
+    key: str = Field(max_length=200)  # the label being saved under, e.g. "my telegram profile"
+    value: str = Field(max_length=2000)
 
 
 class QueryPlan(BaseModel):

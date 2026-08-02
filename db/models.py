@@ -146,18 +146,3 @@ class UsageRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("usage_records_user_idx", "user_id", "created_at"),)
-
-
-class UserKVNote(Base):
-    """Deliberately separate from Entry — a flat fact ("save my linkedin profile: ...")
-    has no category/kind/status/due_at, and forcing it through create_entry() would mean
-    either faking those values or calling the LLM anyway, defeating the point of this
-    zero-LLM fast path. services/kv_notes.py is the only writer."""
-
-    __tablename__ = "user_kv_notes"
-
-    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    key: Mapped[str] = mapped_column(Text, primary_key=True)  # normalized (lowercased, trimmed)
-    value: Mapped[str] = mapped_column(Text, nullable=False)  # stored verbatim — casing matters
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
