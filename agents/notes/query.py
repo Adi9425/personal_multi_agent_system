@@ -72,9 +72,19 @@ async def query(*, user_id: int, text: str) -> Reply:
         return Reply(text="I couldn't find anything matching that.")
 
     tz = ZoneInfo(settings.user_timezone)
+
+    def _body_preview(body: str) -> str:
+        # Bounded, not omitted — this is the only place the entry's actual content (a fact's
+        # value, a note's real detail) ever reaches the synthesis call. Without it, a
+        # correctly-found row still reads as empty to the model (found live: "no actual
+        # password stored" for a fact whose value was sitting right there in `body`).
+        body = body.strip().replace("\n", " ")
+        return body if len(body) <= 300 else body[:300] + "..."
+
     rows_summary = "\n".join(
         f"{i}. {r['title']} | category={r['category']} | status={r['status']} | "
-        f"due={r['due_at'].astimezone(tz).strftime('%a %d %b %H:%M') if r['due_at'] else 'none'}"
+        f"due={r['due_at'].astimezone(tz).strftime('%a %d %b %H:%M') if r['due_at'] else 'none'} | "
+        f"content={_body_preview(r['body'])}"
         for i, r in enumerate(rows, start=1)
     )
     now = datetime.now(tz)
