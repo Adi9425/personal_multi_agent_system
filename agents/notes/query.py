@@ -77,6 +77,7 @@ async def query(*, user_id: int, text: str) -> Reply:
         f"due={r['due_at'].astimezone(tz).strftime('%a %d %b %H:%M') if r['due_at'] else 'none'}"
         for i, r in enumerate(rows, start=1)
     )
+    now = datetime.now(tz)
     synthesis = await call_structured(
         model=settings.model_strong,
         system=(
@@ -85,6 +86,10 @@ async def query(*, user_id: int, text: str) -> Reply:
             "numbered lists, no restating the entries one by one (they're shown to the user "
             "separately right after your answer, in a fixed format you don't control). If "
             "the entries don't actually answer the question, say so plainly.\n\n"
+            f"Current date/time: {now.isoformat()} ({settings.user_timezone}). Compare each "
+            "entry's due date against this exact moment — a due date before this moment is "
+            'OVERDUE, not "coming up" or "nearest upcoming"; say so plainly (e.g. "overdue '
+            'since Thu 30 Jul") rather than phrasing it like a future deadline.\n\n'
             f"Entries:\n{rows_summary}"
         ),
         user=text,
