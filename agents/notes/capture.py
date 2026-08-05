@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.config import settings
-from core.schemas import CapturedEntry, Reply
+from core.schemas import CapturedEntry, EntryKind, Reply
 from db.session import async_session
 from services.embeddings import embed
 from services.entries import create_entry
@@ -58,7 +58,7 @@ async def capture(*, user_id: int, text: str, msg_id: int) -> Reply:
             session,
             user_id=user_id,
             category=captured.category,
-            kind=captured.kind,
+            kind=EntryKind(captured.kind),
             title=captured.title,
             body=text,
             source_msg_id=msg_id,
@@ -74,5 +74,5 @@ async def capture(*, user_id: int, text: str, msg_id: int) -> Reply:
         due_line = f" · due {due_local.strftime('%a %d %b')}"
 
     emoji = CATEGORY_EMOJI.get(captured.category.value, "📝")
-    header = f"{emoji} {captured.category.value} · {captured.kind.value}{due_line}"
+    header = f"{emoji} {captured.category.value} · {captured.kind}{due_line}"
     return Reply(text=f"{header}\n{captured.title}")
