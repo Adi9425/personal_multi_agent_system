@@ -1,5 +1,8 @@
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
+from app.config import settings
 from core.schemas import Reply
 from services import chitchat_constants as const
 
@@ -14,6 +17,7 @@ _WHOAMI_PATTERN = re.compile(const.WHOAMI_PATTERN, re.IGNORECASE)
 _HELP_PATTERN = re.compile(const.HELP_PATTERN, re.IGNORECASE)
 _THANKS_PATTERN = re.compile(const.THANKS_PATTERN, re.IGNORECASE)
 _BYE_PATTERN = re.compile(const.BYE_PATTERN, re.IGNORECASE)
+_TIME_PATTERN = re.compile(const.TIME_PATTERN, re.IGNORECASE)
 
 
 def try_handle(text: str) -> Reply | None:
@@ -29,4 +33,7 @@ def try_handle(text: str) -> Reply | None:
         return Reply(text=const.THANKS_REPLY)
     if _BYE_PATTERN.match(text):
         return Reply(text=const.BYE_REPLY)
+    if _TIME_PATTERN.match(text):
+        now = datetime.now(ZoneInfo(settings.user_timezone))
+        return Reply(text=f"It's {now.strftime('%I:%M %p')} on {now.strftime('%a %d %b')} ({settings.user_timezone}).")
     return None

@@ -7,6 +7,7 @@ WHOAMI_PATTERN = r"^(who|what) are you\??$"
 HELP_PATTERN = r"^(help|what can you do)\??$"
 THANKS_PATTERN = r"^(thanks|thank you|thx|ty)\b[!.]*$"
 BYE_PATTERN = r"^(bye|goodbye|see ya|see you)\b[!.]*$"
+TIME_PATTERN = r"^(what'?s?\s+(the\s+|a\s+)?time(\s+(is\s+it|now))?|time\s+now)\??$"
 
 GREETING_REPLY = "Hey! I'm Jacob — send me anything you want to remember, or ask what's open."
 ALIVE_REPLY = "Yep, I'm here and running."
