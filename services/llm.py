@@ -7,6 +7,7 @@ from langfuse import Langfuse
 from pydantic import BaseModel, ValidationError
 
 from app.config import settings
+from services.schema_minimizer import strip_titles
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ async def call_structured(
     tool = {
         "name": tool_name,
         "description": f"Return a {tool_name}",
-        "input_schema": response_model.model_json_schema(),
+        "input_schema": strip_titles(response_model.model_json_schema()),
     }
 
     messages: list[dict] = [{"role": "user", "content": user}]
