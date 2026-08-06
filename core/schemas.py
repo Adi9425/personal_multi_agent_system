@@ -31,6 +31,12 @@ class EventType(str, enum.Enum):
     archived = "archived"
 
 
+class UserStatus(str, enum.Enum):
+    trial = "trial"
+    active = "active"
+    suspended = "suspended"
+
+
 class JobPayload(BaseModel):
     update_id: int
     user_id: int

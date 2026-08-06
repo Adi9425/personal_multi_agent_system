@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import settings
 from services.schema_minimizer import strip_titles
+from services.usage import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,14 @@ async def call_structured(
     user: str,
     response_model: type[T],
     trace_name: str,
+    user_id: int | None = None,
 ) -> T:
     """D7: every LLM call returns a validated Pydantic model, never free text.
-    All Anthropic calls go through here (§14) — no direct SDK calls in agent code."""
+    All Anthropic calls go through here (§14) — no direct SDK calls in agent code.
+
+    user_id is optional so evals/run.py's direct calls (no real Telegram user) don't write
+    synthetic rows into usage_records — every real call site always has a user_id in scope
+    and should pass it."""
     trace = _langfuse.trace(name=trace_name, input={"system": system, "user": user})
 
     tool_name = response_model.__name__
@@ -50,6 +56,21 @@ async def call_structured(
 
     messages: list[dict] = [{"role": "user", "content": user}]
     last_error: Exception | None = None
+    total_input_tokens = 0
+    total_output_tokens = 0
+
+    async def _record(action_result: str) -> None:
+        # Usage is recorded for every attempt, success or failure — a failed validation
+        # attempt still consumed real, billed tokens.
+        if user_id is not None:
+            await record_usage(
+                user_id=user_id,
+                action=trace_name,
+                model=model,
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
+            )
+        logger.debug("%s: recorded usage (%s)", trace_name, action_result)
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         generation = trace.generation(
@@ -68,6 +89,8 @@ async def call_structured(
             timeout=DEFAULT_TIMEOUT_SECONDS,
         )
         latency_s = time.monotonic() - start
+        total_input_tokens += response.usage.input_tokens
+        total_output_tokens += response.usage.output_tokens
 
         tool_use = next((block for block in response.content if block.type == "tool_use"), None)
         raw_output = tool_use.input if tool_use else None
@@ -89,6 +112,7 @@ async def call_structured(
         try:
             result = response_model.model_validate(raw_output)
             trace.update(output=result.model_dump(mode="json"))
+            await _record("success")
             return result
         except ValidationError as e:
             last_error = e
@@ -111,4 +135,5 @@ async def call_structured(
             ]
 
     trace.update(output={"error": str(last_error)})
+    await _record("failure")
     raise LLMValidationError(str(last_error))
