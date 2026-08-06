@@ -146,3 +146,47 @@ class UsageRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("usage_records_user_idx", "user_id", "created_at"),)
+
+
+class DispatchPattern(Base):
+    """The positive extraction rules for services/kv_notes.py's zero-LLM fast paths (today's
+    hardcoded SAVE_PATTERN/GET_PATTERN). `flow` is plain text, not a Postgres enum — adding a
+    new pattern (the frequent, operational thing) is a data-only insert; only adding a wholly
+    new *flow* would need a code change regardless of column type, so nothing is gained by
+    making this a migration-gated enum. services/dispatch_patterns.py is the only writer."""
+
+    __tablename__ = "dispatch_patterns"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    flow: Mapped[str] = mapped_column(Text, nullable=False)  # "save" | "get"
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    match_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("dispatch_patterns_flow_idx", "flow", "enabled", "priority"),)
+
+
+class DispatchRejectRule(Base):
+    """Veto rules — today's hardcoded _BARE_PRONOUN_KEYS, generalized to a regex fullmatch
+    against the normalized extracted key. A match here means "reject this extraction," not
+    "use this value" — kept in its own table rather than a pattern_type column on
+    DispatchPattern so a caller never has to remember which columns apply to which type."""
+
+    __tablename__ = "dispatch_reject_rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    flow: Mapped[str] = mapped_column(Text, nullable=False)
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    veto_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("dispatch_reject_rules_flow_idx", "flow", "enabled"),)

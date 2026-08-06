@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.schemas import EntryCategory, EntryKind, EntryStatus, EventType
@@ -62,6 +62,21 @@ async def list_recent(session: AsyncSession, *, user_id: int, limit: int = 10) -
         select(Entry).where(Entry.user_id == user_id).order_by(Entry.created_at.desc()).limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def find_fact(session: AsyncSession, *, user_id: int, key: str) -> Entry | None:
+    """Exact (case-insensitive) title match among a user's non-archived kind=fact entries —
+    the zero-LLM lookup path for services/kv_notes.py. Deliberately exact, not ILIKE-wildcard:
+    a fuzzy match risks surfacing the wrong fact for an unrelated key sharing a word."""
+    result = await session.execute(
+        select(Entry).where(
+            Entry.user_id == user_id,
+            Entry.kind == EntryKind.fact,
+            Entry.status != EntryStatus.archived,
+            func.lower(Entry.title) == key.lower(),
+        )
+    )
+    return result.scalars().first()
 
 
 async def _fetch_entry(session: AsyncSession, entry_id: uuid.UUID) -> Entry:

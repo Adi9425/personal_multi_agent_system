@@ -15,6 +15,7 @@ class EntryCategory(str, enum.Enum):
 class EntryKind(str, enum.Enum):
     note = "note"
     task = "task"
+    fact = "fact"
 
 
 class EntryStatus(str, enum.Enum):
@@ -66,7 +67,14 @@ class IntentResult(BaseModel):
 
 class CapturedEntry(BaseModel):
     category: EntryCategory
-    kind: EntryKind
+    # Deliberately narrower than EntryKind (which also has `fact`): the general capture LLM
+    # flow has no idea how to handle a fact (no key/value split, no dedup-by-key) — that's
+    # exclusively services/kv_notes.py's job. EntryKind.fact ended up schema-valid here too
+    # once it was added for kv_notes.py's own use, since CapturedEntry.kind used the full
+    # shared enum — found live: a message that didn't hit kv_notes.py's trigger words still
+    # got the model to pick "fact", producing a malformed-looking reply with none of
+    # kv_notes.py's key/value handling.
+    kind: Literal["note", "task"]
     title: str = Field(max_length=80)  # short, human-scannable, used for matching
     tags: list[str] = Field(default_factory=list, max_length=5)
     due_at: datetime | None = None
@@ -86,6 +94,11 @@ class CapturedEntry(BaseModel):
         if value < now - timedelta(days=1):
             raise ValueError("due_at is more than 1 day in the past")
         return value
+
+
+class FactExtraction(BaseModel):
+    key: str = Field(max_length=200)  # the label being saved under, e.g. "my telegram profile"
+    value: str = Field(max_length=2000)
 
 
 class QueryPlan(BaseModel):

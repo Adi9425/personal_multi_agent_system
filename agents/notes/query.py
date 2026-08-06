@@ -72,11 +72,22 @@ async def query(*, user_id: int, text: str) -> Reply:
         return Reply(text="I couldn't find anything matching that.")
 
     tz = ZoneInfo(settings.user_timezone)
+
+    def _body_preview(body: str) -> str:
+        # Bounded, not omitted — this is the only place the entry's actual content (a fact's
+        # value, a note's real detail) ever reaches the synthesis call. Without it, a
+        # correctly-found row still reads as empty to the model (found live: "no actual
+        # password stored" for a fact whose value was sitting right there in `body`).
+        body = body.strip().replace("\n", " ")
+        return body if len(body) <= 300 else body[:300] + "..."
+
     rows_summary = "\n".join(
         f"{i}. {r['title']} | category={r['category']} | status={r['status']} | "
-        f"due={r['due_at'].astimezone(tz).strftime('%a %d %b %H:%M') if r['due_at'] else 'none'}"
+        f"due={r['due_at'].astimezone(tz).strftime('%a %d %b %H:%M') if r['due_at'] else 'none'} | "
+        f"content={_body_preview(r['body'])}"
         for i, r in enumerate(rows, start=1)
     )
+    now = datetime.now(tz)
     synthesis = await call_structured(
         model=settings.model_strong,
         system=(
@@ -85,6 +96,10 @@ async def query(*, user_id: int, text: str) -> Reply:
             "numbered lists, no restating the entries one by one (they're shown to the user "
             "separately right after your answer, in a fixed format you don't control). If "
             "the entries don't actually answer the question, say so plainly.\n\n"
+            f"Current date/time: {now.isoformat()} ({settings.user_timezone}). Compare each "
+            "entry's due date against this exact moment — a due date before this moment is "
+            'OVERDUE, not "coming up" or "nearest upcoming"; say so plainly (e.g. "overdue '
+            'since Thu 30 Jul") rather than phrasing it like a future deadline.\n\n'
             f"Entries:\n{rows_summary}"
         ),
         user=text,

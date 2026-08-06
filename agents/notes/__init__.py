@@ -2,6 +2,7 @@ import logging
 
 from app.config import settings
 from core.schemas import IntentResult, Reply
+from services import chitchat, kv_notes
 from services.llm import LLMValidationError, call_structured
 
 from agents.notes.capture import capture
@@ -41,6 +42,19 @@ async def classify_intent(text: str, *, user_id: int | None = None) -> IntentRes
 
 
 async def handle(user_id: int, text: str, msg_id: int) -> Reply:
+    # Zero-LLM fast path for greetings/small talk — see services/chitchat.py.
+    chitchat_reply = chitchat.try_handle(text)
+    if chitchat_reply is not None:
+        return chitchat_reply
+
+    # Zero-LLM-first fast path for "what's X" style messages — skips classify_intent
+    # entirely when the trigger word is present, since it already establishes query intent
+    # deterministically (this also sidesteps classify_intent occasionally misclassifying
+    # these as "unknown"). Returns None only if there's no what's/what-is trigger at all.
+    kv_reply = await kv_notes.try_handle_get(user_id, text)
+    if kv_reply is not None:
+        return kv_reply
+
     try:
         intent = await classify_intent(text, user_id=user_id)
     except LLMValidationError:
