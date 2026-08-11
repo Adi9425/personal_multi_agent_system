@@ -17,7 +17,19 @@ class Settings(BaseSettings):
     # commit real values here — this repo is public; real IDs live only in .env.
     admin_telegram_user_ids: str = ""
 
+    # The superuser role migrations run as (db/migrations/env.py) -- also a Postgres
+    # superuser, which unconditionally bypasses Row-Level Security (see the
+    # f1f3d4c93e50 migration). Never used for real request traffic once app_database_url
+    # is set below.
     database_url: str = "postgresql+asyncpg://notes:notes@localhost:5432/notes"
+
+    # The restricted, non-superuser role (notes_app) RLS policies actually apply to. Falls
+    # back to database_url (the superuser role) if unset, purely so the app keeps working
+    # before this is configured -- but RLS is a no-op against that fallback. Set this for
+    # RLS to actually do anything: see the f1f3d4c93e50 migration's comment for the one-time
+    # `ALTER ROLE notes_app PASSWORD ...` step this depends on.
+    app_database_url: str | None = None
+
     redis_url: str = "redis://localhost:6379"
 
     user_timezone: str = "Asia/Kolkata"
@@ -73,6 +85,10 @@ class Settings(BaseSettings):
     @property
     def admin_telegram_user_id_set(self) -> set[int]:
         return {int(uid.strip()) for uid in self.admin_telegram_user_ids.split(",") if uid.strip()}
+
+    @property
+    def effective_app_database_url(self) -> str:
+        return self.app_database_url or self.database_url
 
 
 settings = Settings()
