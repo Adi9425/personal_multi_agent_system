@@ -40,7 +40,11 @@ async def telegram_webhook(
 ) -> dict:
     if settings.telegram_mode != "webhook":
         raise HTTPException(status_code=404)
-    if x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
+    # An unset secret (empty string, the default) must never match — otherwise an attacker
+    # who sends no header at all, or an empty one, would authenticate against a
+    # never-configured secret. Verified this is a real gap: "" != "" is False, so a bare
+    # equality check alone would silently accept it.
+    if not settings.telegram_webhook_secret or x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
         raise HTTPException(status_code=401)
 
     update_data = await request.json()
