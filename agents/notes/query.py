@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from app.config import settings
 from core.schemas import AnswerSynthesis, QueryPlan, Reply
-from db.session import async_session
+from db.session import tenant_session
 from services.embeddings import embed
 from services.llm import call_structured
 from services.search import hybrid_search
@@ -65,7 +65,7 @@ async def query(*, user_id: int, text: str) -> Reply:
     if plan.search_text:
         query_embedding = await embed(plan.search_text, user_id=user_id, action="embed-query")
 
-    async with async_session() as session:
+    async with tenant_session(user_id) as session:
         rows = await hybrid_search(session, user_id=user_id, plan=plan, query_embedding=query_embedding)
 
     if not rows:

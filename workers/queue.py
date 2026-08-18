@@ -8,7 +8,7 @@ from app.config import settings
 from app.logging_config import configure_logging
 from core.schemas import Button, CallbackPayload, JobPayload, Reply
 from db.models import EntryCategory, EntryKind
-from db.session import async_session
+from db.session import tenant_session
 from services import dispatch_patterns, kv_notes, pending_actions
 from services.entries import create_entry, list_recent
 from services.users import is_admin
@@ -125,7 +125,7 @@ async def _build_reply(job: JobPayload) -> Reply:
         return await _handle_pattern_command(job, text)
 
     if text == "/list":
-        async with async_session() as session:
+        async with tenant_session(job.user_id) as session:
             entries = await list_recent(session, user_id=job.user_id)
         if not entries:
             return Reply(text="No notes yet.")
@@ -136,7 +136,7 @@ async def _build_reply(job: JobPayload) -> Reply:
         body = text[len("/note") :].strip()
         if not body:
             return Reply(text="Usage: /note <text>")
-        async with async_session() as session:
+        async with tenant_session(job.user_id) as session:
             entry = await create_entry(
                 session,
                 user_id=job.user_id,

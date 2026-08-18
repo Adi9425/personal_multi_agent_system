@@ -3,7 +3,7 @@ import re
 
 from app.config import settings
 from core.schemas import EntryCategory, EntryKind, FactExtraction, Reply
-from db.session import async_session
+from db.session import tenant_session
 from services import dispatch_patterns
 from services.embeddings import embed
 from services.entries import archive_entry, create_entry, find_fact
@@ -47,7 +47,7 @@ async def _save_fact(user_id: int, key: str, value: str, *, msg_id: int, embeddi
     """Supersedes any existing fact under the same normalized key: archiving instead of
     mutating in place keeps Entry.body's "immutable, set once at creation" invariant intact
     and reuses the existing audit-trailed archive path rather than inventing new semantics."""
-    async with async_session() as session:
+    async with tenant_session(user_id) as session:
         existing = await find_fact(session, user_id=user_id, key=key)
         if existing is not None:
             await archive_entry(session, entry_id=existing.id, source_msg_id=msg_id)
@@ -128,7 +128,7 @@ async def try_handle_get(user_id: int, text: str) -> Reply | None:
         return None
     key, _ = extracted
 
-    async with async_session() as session:
+    async with tenant_session(user_id) as session:
         fact = await find_fact(session, user_id=user_id, key=key)
     if fact is not None:
         return Reply(text=f"{fact.title}: {fact.body}")

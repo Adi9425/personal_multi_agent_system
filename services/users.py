@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from app.config import settings
 from core.schemas import UserStatus
 from db.models import UsageRecord, User
-from db.session import async_session
+from db.session import async_session, tenant_session
 
 AccessDecision = Literal["allowed", "trial_expired", "suspended"]
 
@@ -62,7 +62,7 @@ async def check_access(user: User) -> AccessDecision:
     if user.trial_ends_at is not None and now > user.trial_ends_at:
         return "trial_expired"
 
-    async with async_session() as session:
+    async with tenant_session(user.telegram_user_id) as session:
         result = await session.execute(
             select(func.count()).select_from(UsageRecord).where(UsageRecord.user_id == user.telegram_user_id)
         )
