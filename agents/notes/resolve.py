@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from app.config import settings
 from core.schemas import Button, EntryStatus, QueryPlan, Reply, UpdateRequest
-from db.session import async_session
+from db.session import async_session, tenant_session
 from services import pending_actions
 from services.embeddings import embed
 from services.entries import (
@@ -54,13 +54,14 @@ def _update_request_system_prompt() -> str:
     )
 
 
-async def extract_update_request(text: str) -> UpdateRequest:
+async def extract_update_request(text: str, *, user_id: int | None = None) -> UpdateRequest:
     return await call_structured(
         model=settings.model_fast,
         system=_update_request_system_prompt(),
         user=text,
         response_model=UpdateRequest,
         trace_name="resolve-extract-update-request",
+        user_id=user_id,
     )
 
 
@@ -88,6 +89,16 @@ async def undo(*, entry_id: uuid.UUID, changes: dict, source_msg_id: int | None 
 
 
 async def _run(fn, **kwargs):
+    # Deliberately NOT tenant_session() -- apply_operation()/undo() work by entry_id only,
+    # with no user_id in scope at this call site (it's not threaded through
+    # CallbackPayload/pending_actions today). The entry_id being operated on for the
+    # high-confidence auto-apply path (below) was already found via a tenant_session()-scoped
+    # hybrid_search earlier in resolve(), for the SAME request -- but the separate Undo-button
+    # callback path (workers/queue.py:handle_callback, a later, independent interaction) isn't
+    # re-verified against user_id at all. Real gap, flagged rather than silently left --
+    # closing it means threading user_id through CallbackPayload -> pending_actions ->
+    # apply_operation/undo/_run and the six services/entries.py update functions, which is
+    # its own separate change, not a one-line fix.
     async with async_session() as session:
         return await fn(session, **kwargs)
 
@@ -128,9 +139,9 @@ def _target_hint_search_text(target_hint: str) -> str:
 
 async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
     """§6.2 — the hard path: extract, resolve to a specific entry (or don't guess), apply."""
-    req = await extract_update_request(text)
+    req = await extract_update_request(text, user_id=user_id)
 
-    query_embedding = await embed(req.target_hint)
+    query_embedding = await embed(req.target_hint, user_id=user_id, action="embed-resolve")
     plan = QueryPlan(search_text=_target_hint_search_text(req.target_hint), status=EntryStatus.open)
 
     # Two-tier: floor ON first, so a handful of genuinely-irrelevant-but-not-worst entries
@@ -140,13 +151,13 @@ async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
     # disabling the floor for every resolution (the original approach) let a wholly
     # unrelated entry appear as a 3rd disambiguation candidate when only 2 real matches
     # existed.
-    async with async_session() as session:
+    async with tenant_session(user_id) as session:
         candidates = await hybrid_search(
             session, user_id=user_id, plan=plan, query_embedding=query_embedding, apply_similarity_floor=True
         )
 
     if not candidates:
-        async with async_session() as session:
+        async with tenant_session(user_id) as session:
             closest = await hybrid_search(
                 session, user_id=user_id, plan=plan, query_embedding=query_embedding, apply_similarity_floor=False
             )

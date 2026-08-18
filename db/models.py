@@ -7,8 +7,10 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from sqlalchemy import Boolean, Integer
+
 from app.config import settings
-from core.schemas import EntryCategory, EntryKind, EntryStatus, EventType
+from core.schemas import EntryCategory, EntryKind, EntryStatus, EventType, UserStatus
 
 
 class Base(DeclarativeBase):
@@ -102,3 +104,89 @@ class EntryEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("entry_events_entry_idx", "entry_id", "created_at"),)
+
+
+class User(Base):
+    """No FK from Entry.user_id to here — deliberate, see the multi-tenancy plan's privacy
+    note: enforcing it at the DB level would need a data migration seeding the admin's row,
+    putting a real person's Telegram ID in committed (public) migration history. Enforced at
+    the application level instead (services/users.get_or_create_user runs before any
+    entry-creating action reaches the data layer)."""
+
+    __tablename__ = "users"
+
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    telegram_username: Mapped[str | None] = mapped_column(Text, nullable=True)  # display only, never an identity key
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    status: Mapped[UserStatus] = mapped_column(
+        SAEnum(UserStatus, name="user_status", values_callable=_enum_values),
+        nullable=False,
+        server_default=UserStatus.trial.value,
+    )
+    trial_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UsageRecord(Base):
+    """The trial-limit source of truth (services/users.check_access queries this directly —
+    no separate counter to drift out of sync) and the raw per-call data for real cost
+    analysis. Written once per real Anthropic/Voyage call, success or failure, by
+    services/usage.py — the only writer, same single-choke-point pattern as D5."""
+
+    __tablename__ = "usage_records"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)  # e.g. "classify-intent", "embed-capture"
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("usage_records_user_idx", "user_id", "created_at"),)
+
+
+class DispatchPattern(Base):
+    """The positive extraction rules for services/kv_notes.py's zero-LLM fast paths (today's
+    hardcoded SAVE_PATTERN/GET_PATTERN). `flow` is plain text, not a Postgres enum — adding a
+    new pattern (the frequent, operational thing) is a data-only insert; only adding a wholly
+    new *flow* would need a code change regardless of column type, so nothing is gained by
+    making this a migration-gated enum. services/dispatch_patterns.py is the only writer."""
+
+    __tablename__ = "dispatch_patterns"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    flow: Mapped[str] = mapped_column(Text, nullable=False)  # "save" | "get"
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    match_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("dispatch_patterns_flow_idx", "flow", "enabled", "priority"),)
+
+
+class DispatchRejectRule(Base):
+    """Veto rules — today's hardcoded _BARE_PRONOUN_KEYS, generalized to a regex fullmatch
+    against the normalized extracted key. A match here means "reject this extraction," not
+    "use this value" — kept in its own table rather than a pattern_type column on
+    DispatchPattern so a caller never has to remember which columns apply to which type."""
+
+    __tablename__ = "dispatch_reject_rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    flow: Mapped[str] = mapped_column(Text, nullable=False)
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    veto_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("dispatch_reject_rules_flow_idx", "flow", "enabled"),)

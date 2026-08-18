@@ -10,6 +10,8 @@ from app.logging_config import configure_logging
 from core.schemas import CallbackPayload, JobPayload, Reply
 from db.models import ProcessedUpdate
 from db.session import async_session
+from services.rate_limit import check_and_increment
+from services.users import check_access, get_or_create_user
 from workers.pool import get_pool
 
 configure_logging()
@@ -18,13 +20,39 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=settings.telegram_bot_token)
 dispatcher = Dispatcher()
 
+_REJECTION_MESSAGES = {
+    "trial_expired": "Your free trial has ended. Payment support is coming soon — thanks for trying this out!",
+    "suspended": "Your account has been suspended.",
+}
 
-async def handle_update(*, user_id: int, chat_id: int, msg_id: int, text: str, update_id: int) -> None:
-    """§3.3 steps 1-3: whitelist -> dedupe -> enqueue. Nothing here talks to Telegram
+
+async def _check_access(*, user_id: int, chat_id: int, username: str | None) -> bool:
+    """Replaces the old single-chat_id whitelist (deliberately reverses FR-16) — any
+    Telegram user is now accepted, auto-registered on a free trial. Sends a direct
+    rejection reply and returns False for anyone not allowed to proceed; nothing gets
+    enqueued for a rejected user. Rate limiting doesn't apply to the admin — the plan's own
+    verification goal is that normal admin use has zero rate-limiting friction."""
+    user = await get_or_create_user(user_id, username)
+    decision = await check_access(user)
+    if decision != "allowed":
+        await bot.send_message(chat_id, _REJECTION_MESSAGES[decision])
+        return False
+
+    if not user.is_admin and not await check_and_increment(user_id, limit=settings.rate_limit_max_per_minute):
+        await bot.send_message(chat_id, "You're sending messages too fast — please slow down.")
+        return False
+
+    return True
+
+
+async def handle_update(
+    *, user_id: int, chat_id: int, msg_id: int, text: str, update_id: int, username: str | None = None
+) -> None:
+    """§3.3 steps 1-3: access control -> dedupe -> enqueue. Nothing here talks to Telegram
     beyond what aiogram already handed us — this function is the one seam FastAPI's
     webhook route and the polling loop both funnel through."""
-    if chat_id not in settings.allowed_chat_ids:
-        logger.info("dropping message from non-whitelisted chat_id=%s", chat_id)
+    if not await _check_access(user_id=user_id, chat_id=chat_id, username=username):
+        logger.info("access denied for user_id=%s", user_id)
         return
 
     async with async_session() as session:
@@ -59,15 +87,26 @@ async def on_message(message: Message, event_update: Update) -> None:
         msg_id=message.message_id,
         text=message.text,
         update_id=event_update.update_id,
+        username=message.from_user.username,
     )
 
 
-async def handle_callback_query(*, user_id: int, chat_id: int, message_id: int, callback_id: str, token: str, update_id: int) -> None:
-    """Same whitelist -> dedupe -> enqueue shape as handle_update, for button presses.
+async def handle_callback_query(
+    *,
+    user_id: int,
+    chat_id: int,
+    message_id: int,
+    callback_id: str,
+    token: str,
+    update_id: int,
+    username: str | None = None,
+) -> None:
+    """Same access-control -> dedupe -> enqueue shape as handle_update, for button presses.
     Answered immediately (Telegram shows a loading spinner on the button until this
     happens) — the actual apply logic runs later in the worker, same as messages."""
-    if chat_id not in settings.allowed_chat_ids:
-        logger.info("dropping callback from non-whitelisted chat_id=%s", chat_id)
+    if not await _check_access(user_id=user_id, chat_id=chat_id, username=username):
+        logger.info("access denied (callback) for user_id=%s", user_id)
+        await bot.answer_callback_query(callback_id)
         return
 
     async with async_session() as session:
@@ -104,6 +143,7 @@ async def on_callback(callback: CallbackQuery, event_update: Update) -> None:
         callback_id=callback.id,
         token=callback.data,
         update_id=event_update.update_id,
+        username=callback.from_user.username,
     )
 
 

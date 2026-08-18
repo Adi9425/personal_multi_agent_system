@@ -2,8 +2,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.config import settings
-from core.schemas import CapturedEntry, Reply
-from db.session import async_session
+from core.schemas import CapturedEntry, EntryKind, Reply
+from db.session import tenant_session
 from services.embeddings import embed
 from services.entries import create_entry
 from services.llm import call_structured
@@ -36,28 +36,29 @@ def _extraction_system_prompt() -> str:
     )
 
 
-async def extract(text: str) -> CapturedEntry:
+async def extract(text: str, *, user_id: int | None = None) -> CapturedEntry:
     return await call_structured(
         model=settings.model_strong,
         system=_extraction_system_prompt(),
         user=text,
         response_model=CapturedEntry,
         trace_name="capture-extract",
+        user_id=user_id,
     )
 
 
 async def capture(*, user_id: int, text: str, msg_id: int) -> Reply:
     """§6.1, minus the Phase-6 Doc re-render step."""
-    captured = await extract(text)
+    captured = await extract(text, user_id=user_id)
 
-    vector = await embed(f"{captured.title}\n{text}")
+    vector = await embed(f"{captured.title}\n{text}", user_id=user_id, action="embed-capture")
 
-    async with async_session() as session:
+    async with tenant_session(user_id) as session:
         await create_entry(
             session,
             user_id=user_id,
             category=captured.category,
-            kind=captured.kind,
+            kind=EntryKind(captured.kind),
             title=captured.title,
             body=text,
             source_msg_id=msg_id,
@@ -73,5 +74,5 @@ async def capture(*, user_id: int, text: str, msg_id: int) -> Reply:
         due_line = f" · due {due_local.strftime('%a %d %b')}"
 
     emoji = CATEGORY_EMOJI.get(captured.category.value, "📝")
-    header = f"{emoji} {captured.category.value} · {captured.kind.value}{due_line}"
+    header = f"{emoji} {captured.category.value} · {captured.kind}{due_line}"
     return Reply(text=f"{header}\n{captured.title}")
