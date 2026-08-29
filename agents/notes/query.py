@@ -24,6 +24,10 @@ def _query_plan_system_prompt() -> str:
         "structured filters.\n\n"
         "category: one of office_work, self_learning, personal, ideas, or null if not implied.\n"
         "status: one of open, done, archived, or null if not implied.\n"
+        "kind: one of task, note, fact, or null if not implied. Use task for to-do/deadline/"
+        '"pending"/"overdue" phrasing (e.g. "what\'s pending", "what do I still owe"); fact or '
+        'note for "what\'s my X" / "what did I save about X" lookups; null when the question '
+        'genuinely doesn\'t imply one kind (e.g. "find anything about Intuit").\n'
         'due_before: an ISO datetime if the question implies a deadline window (e.g. "this '
         'week"), else null.\n'
         "completed_after: an ISO datetime if the question asks about recently finished items, "
@@ -53,7 +57,7 @@ def _format_source(row: dict) -> str:
         due_local = row["due_at"].astimezone(tz)
         due = f" · due {due_local.strftime('%a %d %b')}"
     emoji = CATEGORY_EMOJI.get(row["category"], "📝")
-    return f"{emoji} {row['title']} ({row['category']} · {row['status']}{due})"
+    return f"{emoji} {row['title']} ({row['category']} · {row['kind']} · {row['status']}{due})"
 
 
 async def query(*, user_id: int, text: str) -> Reply:
@@ -82,7 +86,7 @@ async def query(*, user_id: int, text: str) -> Reply:
         return body if len(body) <= 300 else body[:300] + "..."
 
     rows_summary = "\n".join(
-        f"{i}. {r['title']} | category={r['category']} | status={r['status']} | "
+        f"{i}. {r['title']} | category={r['category']} | kind={r['kind']} | status={r['status']} | "
         f"due={r['due_at'].astimezone(tz).strftime('%a %d %b %H:%M') if r['due_at'] else 'none'} | "
         f"content={_body_preview(r['body'])}"
         for i, r in enumerate(rows, start=1)
@@ -100,6 +104,11 @@ async def query(*, user_id: int, text: str) -> Reply:
             "entry's due date against this exact moment — a due date before this moment is "
             'OVERDUE, not "coming up" or "nearest upcoming"; say so plainly (e.g. "overdue '
             'since Thu 30 Jul") rather than phrasing it like a future deadline.\n\n'
+            "Each entry's `kind` is one of task, note, or fact — only call something a "
+            '"task" or "pending" if kind=task. A fact or note is saved information, not '
+            "something the user owes or needs to act on; describe it as what it is (e.g. "
+            '"you also have a saved note/fact about X") rather than folding it into a task '
+            "count or calling it overdue.\n\n"
             f"Entries:\n{rows_summary}"
         ),
         user=text,

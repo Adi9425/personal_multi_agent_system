@@ -105,6 +105,7 @@ class QueryPlan(BaseModel):
     search_text: str | None = None
     category: EntryCategory | None = None
     status: EntryStatus | None = None
+    kind: EntryKind | None = None
     due_before: datetime | None = None
     completed_after: datetime | None = None
     limit: int = 10
