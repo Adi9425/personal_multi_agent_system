@@ -199,6 +199,9 @@ class QueryPlan(BaseModel):
     search_text: str | None = None
     category: EntryCategory | None = None
     status: EntryStatus | None = None
+    kind: EntryKind | None = None   # added post-launch: without it, "pending task" and
+                                     # "what's open" returned identical rows — see
+                                     # query-kind-blindness-investigation.md
     due_before: datetime | None = None
     completed_after: datetime | None = None
     limit: int = 10
@@ -254,7 +257,7 @@ worked example and an "when genuinely unsure, prefer capture" tie-break rule.
 ```
 "what's open in office work"
   -> classify_intent() -> "query"
-  -> query.extract_plan()   Haiku -> QueryPlan(category=office_work, status=open, search_text=None)
+  -> query.extract_plan()   Haiku -> QueryPlan(category=office_work, status=open, kind=null, search_text=None)
   -> [no search_text -> skip embedding]
   -> services.search.hybrid_search(plan, query_embedding=None)
        SQL only: WHERE user_id=... AND category=... AND status=...

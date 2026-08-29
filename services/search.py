@@ -12,6 +12,7 @@ _FILTERED_CTE = """
         WHERE user_id = (:user_id)::bigint
           AND ((:category)::text IS NULL OR category = (:category)::text)
           AND ((:status)::text IS NULL OR status = (:status)::text)
+          AND ((:kind)::text IS NULL OR kind = (:kind)::text)
           AND ((:due_before)::timestamptz IS NULL OR due_at <= (:due_before)::timestamptz)
           AND (
             (:completed_after)::timestamptz IS NULL
@@ -40,6 +41,7 @@ async def hybrid_search(
         "user_id": user_id,
         "category": plan.category.value if plan.category else None,
         "status": plan.status.value if plan.status else None,
+        "kind": plan.kind.value if plan.kind else None,
         "due_before": plan.due_before,
         "completed_after": plan.completed_after,
         "limit": plan.limit,
