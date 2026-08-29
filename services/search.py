@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from core.schemas import QueryPlan
+
+logger = logging.getLogger(__name__)
 
 # D8: search reads searchable_items only, never `entries` directly. Later agents (calendar,
 # job pipeline) join the view via UNION ALL; this filter/ranking logic never has to change.
@@ -46,6 +50,12 @@ async def hybrid_search(
         "completed_after": plan.completed_after,
         "limit": plan.limit,
     }
+    logger.debug(
+        "hybrid_search user_id=%s filters: category=%s status=%s kind=%s due_before=%s "
+        "completed_after=%s ranked=%s",
+        user_id, params["category"], params["status"], params["kind"], params["due_before"],
+        params["completed_after"], plan.search_text is not None,
+    )
 
     if plan.search_text is None:
         query = text(
@@ -57,7 +67,9 @@ async def hybrid_search(
             """
         )
         result = await session.execute(query, params)
-        return [dict(row) for row in result.mappings().all()]
+        rows = [dict(row) for row in result.mappings().all()]
+        logger.debug("hybrid_search user_id=%s: %d rows (unranked, filter-only)", user_id, len(rows))
+        return rows
 
     params["search_query"] = plan.search_text
     params["recency_weight"] = settings.recency_weight
@@ -119,4 +131,9 @@ async def hybrid_search(
         """
     )
     result = await session.execute(query, params)
-    return [dict(row) for row in result.mappings().all()]
+    rows = [dict(row) for row in result.mappings().all()]
+    logger.debug(
+        "hybrid_search user_id=%s: %d rows (ranked, vector=%s)",
+        user_id, len(rows), query_embedding is not None,
+    )
+    return rows

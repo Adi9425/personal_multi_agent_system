@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -18,6 +19,8 @@ from services.entries import (
 )
 from services.llm import call_structured
 from services.search import hybrid_search
+
+logger = logging.getLogger(__name__)
 
 # §6.2: score(d) = 1/(60+rank_fts) + 1/(60+rank_vec) + RECENCY_WEIGHT*recency(d). The
 # theoretical max (rank 1 on both signals, zero age) is what AUTO_THRESHOLD/GAP_THRESHOLD are
@@ -140,6 +143,10 @@ def _target_hint_search_text(target_hint: str) -> str:
 async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
     """§6.2 — the hard path: extract, resolve to a specific entry (or don't guess), apply."""
     req = await extract_update_request(text, user_id=user_id)
+    logger.info(
+        "update request user_id=%s: operation=%s target_hint=%r value=%r",
+        user_id, req.operation, req.target_hint, req.value,
+    )
 
     query_embedding = await embed(req.target_hint, user_id=user_id, action="embed-resolve")
     plan = QueryPlan(search_text=_target_hint_search_text(req.target_hint), status=EntryStatus.open)
@@ -169,8 +176,14 @@ async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
     top = candidates[0]
     top_norm = float(top["score"]) / MAX_POSSIBLE_SCORE
     second_norm = float(candidates[1]["score"]) / MAX_POSSIBLE_SCORE if len(candidates) > 1 else 0.0
+    auto_apply = top_norm >= settings.auto_threshold and (top_norm - second_norm) >= settings.gap_threshold
+    logger.info(
+        "resolve user_id=%s: %d candidates, top=%r (norm=%.3f) second_norm=%.3f -> %s",
+        user_id, len(candidates), top["title"], top_norm, second_norm,
+        "auto-apply" if auto_apply else "disambiguate",
+    )
 
-    if top_norm >= settings.auto_threshold and (top_norm - second_norm) >= settings.gap_threshold:
+    if auto_apply:
         entry, changes = await apply_operation(
             operation=req.operation, entry_id=top["id"], value=req.value, source_msg_id=msg_id
         )

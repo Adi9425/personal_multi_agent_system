@@ -32,6 +32,11 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379"
 
+    # Plain level name ("DEBUG", "INFO", ...) so raising verbosity — e.g. to see every
+    # QueryPlan agents/notes/query.py extracts — is a .env change, not a code change. See
+    # app/logging_config.py.
+    log_level: str = "INFO"
+
     user_timezone: str = "Asia/Kolkata"
 
     # HLD §4 note: keep this in one config constant, not scattered across migrations.

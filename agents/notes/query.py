@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -7,6 +8,8 @@ from db.session import tenant_session
 from services.embeddings import embed
 from services.llm import call_structured
 from services.search import hybrid_search
+
+logger = logging.getLogger(__name__)
 
 CATEGORY_EMOJI = {
     "office_work": "📁",
@@ -64,6 +67,17 @@ async def query(*, user_id: int, text: str) -> Reply:
     """§6.3: structured filters as SQL, hybrid ranking only if a topic is present,
     answer synthesis with citations (FR-13)."""
     plan = await extract_plan(text, user_id=user_id)
+    # INFO, not DEBUG: this is the one line that would have caught the "pending task"
+    # bug immediately — kind=null alongside status=open is exactly what let facts/notes
+    # ride along with real tasks (see query-kind-blindness-investigation.md). Cheap enough
+    # (one line, no row content) to leave on at the default level rather than gating it
+    # behind LOG_LEVEL=DEBUG.
+    logger.info(
+        "query plan user_id=%s: kind=%s category=%s status=%s search_text=%r "
+        "due_before=%s completed_after=%s",
+        user_id, plan.kind, plan.category, plan.status, plan.search_text,
+        plan.due_before, plan.completed_after,
+    )
 
     query_embedding = None
     if plan.search_text:
@@ -72,7 +86,23 @@ async def query(*, user_id: int, text: str) -> Reply:
     async with tenant_session(user_id) as session:
         rows = await hybrid_search(session, user_id=user_id, plan=plan, query_embedding=query_embedding)
 
+    if logger.isEnabledFor(logging.DEBUG):
+        # Metadata only, never row['body'] — a fact's body is routinely a secret (a wifi
+        # password, a token) or someone else's PII; that has no business sitting in a log
+        # file on disk just to debug ranking/filtering. Title is fine: it's already what
+        # gets rendered back to the user in the reply.
+        logger.debug(
+            "query rows user_id=%s: %s",
+            user_id,
+            [
+                {"title": r["title"], "kind": r["kind"], "category": r["category"],
+                 "status": r["status"], "score": r.get("score")}
+                for r in rows
+            ],
+        )
+
     if not rows:
+        logger.info("query user_id=%s: no matching rows", user_id)
         return Reply(text="I couldn't find anything matching that.")
 
     tz = ZoneInfo(settings.user_timezone)
