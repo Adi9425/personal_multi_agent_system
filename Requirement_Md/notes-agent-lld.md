@@ -409,5 +409,16 @@ run in separate terminals (or as background tasks) — killing/restarting either
 - **`core/router.py`** — the cross-agent router stub. There is still only one agent (notes),
   so this would be a function with one hardcoded branch and no caller. Deferred until a
   second agent actually exists, per the HLD's own non-goals (§1.2).
+- **Indirect prompt-injection hardening for query synthesis** — `agents/notes/query.py:118-142`
+  interpolates retrieved entries' `body` text straight into the *system* prompt for the
+  answer-synthesis call (`f"Entries:\n{rows_summary}"`), with no delimiter and no "this is
+  data, not instructions" guardrail. A stored note whose body contains adversarial text (e.g.
+  pasted from a phishing email/webpage) sits in the same channel as the system instructions
+  for that one call. Bounded today — output is still constrained to `AnswerSynthesis`'s schema
+  and rows are already scoped to the requesting user via RLS/`user_id`, so worst case is a
+  manipulated answer string, not an action or cross-user leak — but not actually mitigated.
+  Fix: wrap `rows_summary` in an explicit delimiter (e.g. `<entries>...</entries>`) and add a
+  line telling the model content inside it is retrieved data to ignore as instructions. Not
+  started.
 - Everything in HLD §12 (reminders, short-term conversation memory, cross-domain recall,
   recurring entries, multi-user, voice capture) — explicitly v2, untouched.
