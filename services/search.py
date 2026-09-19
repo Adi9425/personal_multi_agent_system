@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 _FILTERED_CTE = """
     filtered AS (
         SELECT * FROM searchable_items
-        WHERE user_id = (:user_id)::bigint
+        WHERE user_id = (:user_id)::uuid
           AND ((:category)::text IS NULL OR category = (:category)::text)
           AND ((:status)::text IS NULL OR status = (:status)::text)
           AND ((:kind)::text IS NULL OR kind = (:kind)::text)
@@ -36,13 +37,16 @@ def _vector_literal(embedding: list[float]) -> str:
 async def hybrid_search(
     session: AsyncSession,
     *,
-    user_id: int,
+    user_id: uuid.UUID,
     plan: QueryPlan,
     query_embedding: list[float] | None,
     apply_similarity_floor: bool = True,
 ) -> list[dict]:
     params = {
-        "user_id": user_id,
+        # str(): asyncpg has no implicit encoding for a bare uuid.UUID bound to a `text()`
+        # query's untyped placeholder -- same reason _vector_literal() below passes a string
+        # for `::vector(...)` rather than a raw list.
+        "user_id": str(user_id),
         "category": plan.category.value if plan.category else None,
         "status": plan.status.value if plan.status else None,
         "kind": plan.kind.value if plan.kind else None,

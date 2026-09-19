@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 from typing import TypeVar
 
 from anthropic import AsyncAnthropic
@@ -37,7 +38,7 @@ async def call_structured(
     user: str,
     response_model: type[T],
     trace_name: str,
-    user_id: int | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> T:
     """D7: every LLM call returns a validated Pydantic model, never free text.
     All Anthropic calls go through here (§14) — no direct SDK calls in agent code.

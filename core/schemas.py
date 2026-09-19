@@ -1,4 +1,5 @@
 import enum
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -40,7 +41,8 @@ class UserStatus(str, enum.Enum):
 
 class JobPayload(BaseModel):
     update_id: int
-    user_id: int
+    user_id: int  # Telegram id — admin checks (is_admin) and dispatch_patterns.created_by need this one
+    user_uuid: uuid.UUID  # internal users.id — everything touching entries/usage_records/search needs this one
     chat_id: int
     msg_id: int
     text: str

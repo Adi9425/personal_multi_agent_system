@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -36,7 +37,7 @@ def _extraction_system_prompt() -> str:
     )
 
 
-async def extract(text: str, *, user_id: int | None = None) -> CapturedEntry:
+async def extract(text: str, *, user_id: uuid.UUID | None = None) -> CapturedEntry:
     return await call_structured(
         model=settings.model_strong,
         system=_extraction_system_prompt(),
@@ -47,7 +48,7 @@ async def extract(text: str, *, user_id: int | None = None) -> CapturedEntry:
     )
 
 
-async def capture(*, user_id: int, text: str, msg_id: int) -> Reply:
+async def capture(*, user_id: uuid.UUID, text: str, msg_id: int) -> Reply:
     """§6.1, minus the Phase-6 Doc re-render step."""
     captured = await extract(text, user_id=user_id)
 

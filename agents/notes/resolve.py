@@ -57,7 +57,7 @@ def _update_request_system_prompt() -> str:
     )
 
 
-async def extract_update_request(text: str, *, user_id: int | None = None) -> UpdateRequest:
+async def extract_update_request(text: str, *, user_id: uuid.UUID | None = None) -> UpdateRequest:
     return await call_structured(
         model=settings.model_fast,
         system=_update_request_system_prompt(),
@@ -140,7 +140,7 @@ def _target_hint_search_text(target_hint: str) -> str:
     return " OR ".join(words)
 
 
-async def resolve(*, user_id: int, text: str, msg_id: int) -> Reply:
+async def resolve(*, user_id: uuid.UUID, text: str, msg_id: int) -> Reply:
     """§6.2 — the hard path: extract, resolve to a specific entry (or don't guess), apply."""
     req = await extract_update_request(text, user_id=user_id)
     logger.info(

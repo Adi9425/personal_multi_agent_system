@@ -1,5 +1,6 @@
 import asyncio
 import re
+import uuid
 
 from app.config import settings
 from core.schemas import EntryCategory, EntryKind, FactExtraction, Reply
@@ -32,7 +33,7 @@ def _normalize_key(key: str) -> str:
     return key.strip().lower()
 
 
-async def _extract_fact(text: str, *, user_id: int) -> FactExtraction:
+async def _extract_fact(text: str, *, user_id: uuid.UUID) -> FactExtraction:
     return await call_structured(
         model=settings.model_fast,
         system=_FACT_EXTRACT_SYSTEM_PROMPT,
@@ -43,7 +44,9 @@ async def _extract_fact(text: str, *, user_id: int) -> FactExtraction:
     )
 
 
-async def _save_fact(user_id: int, key: str, value: str, *, msg_id: int, embedding: list[float] | None) -> None:
+async def _save_fact(
+    user_id: uuid.UUID, key: str, value: str, *, msg_id: int, embedding: list[float] | None
+) -> None:
     """Supersedes any existing fact under the same normalized key: archiving instead of
     mutating in place keeps Entry.body's "immutable, set once at creation" invariant intact
     and reuses the existing audit-trailed archive path rather than inventing new semantics."""
@@ -91,7 +94,7 @@ def _try_extract(text: str, flow: str) -> tuple[str, str | None] | None:
     return None
 
 
-async def try_handle_save(user_id: int, text: str, msg_id: int) -> Reply | None:
+async def try_handle_save(user_id: uuid.UUID, text: str, msg_id: int) -> Reply | None:
     """DB-pattern-first fast path for "save X: Y" style messages, with a cheap LLM fallback
     for messages that clearly want to save a fact (trigger word present) but don't parse
     cleanly. Returns None only if there's no save/remember trigger at all — once the trigger
@@ -115,7 +118,7 @@ async def try_handle_save(user_id: int, text: str, msg_id: int) -> Reply | None:
     return Reply(text=f"Saved: {fact.key} = {fact.value}")
 
 
-async def try_handle_get(user_id: int, text: str) -> Reply | None:
+async def try_handle_get(user_id: uuid.UUID, text: str) -> Reply | None:
     """DB-pattern-first fast path for "what's X" style messages: exact-title lookup among
     the user's fact entries. Falls through to the full query() pipeline (skipping
     classify_intent, since a matched pattern already establishes query intent) if no fact

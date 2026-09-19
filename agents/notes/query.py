@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -42,7 +43,7 @@ def _query_plan_system_prompt() -> str:
     )
 
 
-async def extract_plan(text: str, *, user_id: int | None = None) -> QueryPlan:
+async def extract_plan(text: str, *, user_id: uuid.UUID | None = None) -> QueryPlan:
     return await call_structured(
         model=settings.model_fast,
         system=_query_plan_system_prompt(),
@@ -63,7 +64,7 @@ def _format_source(row: dict) -> str:
     return f"{emoji} {row['title']} ({row['category']} · {row['kind']} · {row['status']}{due})"
 
 
-async def query(*, user_id: int, text: str) -> Reply:
+async def query(*, user_id: uuid.UUID, text: str) -> Reply:
     """§6.3: structured filters as SQL, hybrid ranking only if a topic is present,
     answer synthesis with citations (FR-13)."""
     plan = await extract_plan(text, user_id=user_id)

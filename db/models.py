@@ -2,12 +2,22 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, Computed, DateTime, ForeignKey, Index, Text, func, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Computed,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-from sqlalchemy import Boolean, Integer
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.config import settings
 from core.schemas import EntryCategory, EntryKind, EntryStatus, EventType, UserStatus
@@ -38,7 +48,9 @@ class Entry(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     category: Mapped[EntryCategory] = mapped_column(
         SAEnum(EntryCategory, name="entry_category", values_callable=_enum_values), nullable=False
     )
@@ -107,16 +119,22 @@ class EntryEvent(Base):
 
 
 class User(Base):
-    """No FK from Entry.user_id to here — deliberate, see the multi-tenancy plan's privacy
-    note: enforcing it at the DB level would need a data migration seeding the admin's row,
-    putting a real person's Telegram ID in committed (public) migration history. Enforced at
-    the application level instead (services/users.get_or_create_user runs before any
-    entry-creating action reaches the data layer)."""
+    """Core identity + access control — the part read on every update by check_access.
+    `id` is the only identity other tables reference; telegram_user_id is an external handle
+    (unique, used to look a user up at the inbound boundary, never an FK target). Everything
+    the user can edit lives in UserProfile. services/users.py is the only writer of both.
+
+    Entry/UsageRecord.user_id carry real FKs. The earlier objection (seeding the admin's row
+    would commit a real Telegram ID to public migration history) doesn't apply here: the
+    221e037b81ba migration backfills users from existing entries/usage_records rows in SQL,
+    so no ID is ever written into the repo."""
 
     __tablename__ = "users"
 
-    telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    telegram_username: Mapped[str | None] = mapped_column(Text, nullable=True)  # display only, never an identity key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     status: Mapped[UserStatus] = mapped_column(
         SAEnum(UserStatus, name="user_status", values_callable=_enum_values),
@@ -125,8 +143,57 @@ class User(Base):
     )
     trial_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspension_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The user blocked the BOT (Telegram 403) — independent of status. Set by
+    # services/users.mark_bot_blocked, cleared automatically the next time they message.
+    bot_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Always exists (created in the same transaction as the user), hence innerjoin.
+    profile: Mapped["UserProfile"] = relationship(
+        back_populates="user",
+        lazy="joined",
+        innerjoin=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(status = 'suspended') = (suspended_at IS NOT NULL)",
+            name="ck_users_suspension_consistency",
+        ),
+    )
+
+
+class UserProfile(Base):
+    """User-editable data, 1:1 with users — the PK is the FK, so a second row can't exist.
+    Telegram-sourced fields are re-synced by get_or_create_user; display_name, language,
+    timezone and settings are user-owned and never touched by that sync."""
+
+    __tablename__ = "user_profiles"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    telegram_username: Mapped[str | None] = mapped_column(Text, nullable=True)  # display only, never an identity key
+    first_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str] = mapped_column(Text, nullable=False, server_default="en")  # seeded from Telegram at signup
+    timezone: Mapped[str] = mapped_column(Text, nullable=False, server_default="UTC")
+    # Validated by a Pydantic model in the app layer; promote a key to a column once SQL filters on it.
+    settings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="profile")
 
 
 class UsageRecord(Base):
@@ -138,7 +205,9 @@ class UsageRecord(Base):
     __tablename__ = "usage_records"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     action: Mapped[str] = mapped_column(Text, nullable=False)  # e.g. "classify-intent", "embed-capture"
     model: Mapped[str] = mapped_column(Text, nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
