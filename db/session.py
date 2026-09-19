@@ -1,3 +1,4 @@
+import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -23,14 +24,17 @@ async def get_session() -> AsyncSession:
 
 
 @asynccontextmanager
-async def tenant_session(user_id: int) -> AsyncIterator[AsyncSession]:
+async def tenant_session(user_id: uuid.UUID) -> AsyncIterator[AsyncSession]:
     """The tenant-scoped entry point for anything touching a specific user's data. Issues
     `SET LOCAL app.current_user_id` as the first statement in the transaction -- scoped to
     that transaction only (never bare SET, which would leak across a pooled connection to a
     different request) -- so the Row-Level Security policies on `entries`/`usage_records`
-    (f1f3d4c93e50) actually have a tenant to enforce against. This is a backstop underneath
-    the existing explicit `WHERE user_id = ...` clauses in services/entries.py etc., not a
-    replacement for them -- those stay exactly as they are.
+    (f1f3d4c93e50, cast to ::uuid since 221e037b81ba) actually have a tenant to enforce
+    against. This is a backstop underneath the existing explicit `WHERE user_id = ...` clauses
+    in services/entries.py etc., not a replacement for them -- those stay exactly as they are.
+
+    Takes the internal `users.id` (UUID), not the Telegram id -- entries/usage_records are
+    FK'd to users.id since 221e037b81ba, so that's what the policies compare against.
 
     Only effective once settings.app_database_url points at the restricted notes_app role;
     against the superuser fallback, RLS (and therefore this) is a harmless no-op, since

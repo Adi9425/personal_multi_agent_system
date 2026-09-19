@@ -29,6 +29,7 @@ take the fast path versus the full LLM pipeline, and why.
 
 ## Docs
 
+- [`Requirement_Md/agent-architecture.md`](Requirement_Md/agent-architecture.md) — architecture-level view: what an agent is here, the two-layer dispatch cascade, data/storage layout, and where a future second agent would plug in.
 - [`Requirement_Md/notes-agent-hld.md`](Requirement_Md/notes-agent-hld.md) — the original spec (data model, LLM contracts, search/ranking).
 - [`Requirement_Md/notes-agent-lld.md`](Requirement_Md/notes-agent-lld.md) — how it's actually built: real schemas, real function signatures, real bugs found and fixed, where the implementation deviates from the spec and why.
 - [`Requirement_Md/request-flow.md`](Requirement_Md/request-flow.md) — a message's full path from Telegram to reply, stage by stage, with which calls are zero-LLM and which aren't.

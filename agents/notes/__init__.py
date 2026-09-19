@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from app.config import settings
 from core.schemas import IntentResult, Reply
@@ -30,7 +31,7 @@ INTENT_SYSTEM_PROMPT = (
 )
 
 
-async def classify_intent(text: str, *, user_id: int | None = None) -> IntentResult:
+async def classify_intent(text: str, *, user_id: uuid.UUID | None = None) -> IntentResult:
     return await call_structured(
         model=settings.model_fast,
         system=INTENT_SYSTEM_PROMPT,
@@ -41,7 +42,7 @@ async def classify_intent(text: str, *, user_id: int | None = None) -> IntentRes
     )
 
 
-async def handle(user_id: int, text: str, msg_id: int) -> Reply:
+async def handle(user_id: uuid.UUID, text: str, msg_id: int) -> Reply:
     # Zero-LLM fast path for greetings/small talk — see services/chitchat.py.
     chitchat_reply = chitchat.try_handle(text)
     if chitchat_reply is not None:

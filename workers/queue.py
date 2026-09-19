@@ -125,8 +125,8 @@ async def _build_reply(job: JobPayload) -> Reply:
         return await _handle_pattern_command(job, text)
 
     if text == "/list":
-        async with tenant_session(job.user_id) as session:
-            entries = await list_recent(session, user_id=job.user_id)
+        async with tenant_session(job.user_uuid) as session:
+            entries = await list_recent(session, user_id=job.user_uuid)
         if not entries:
             return Reply(text="No notes yet.")
         lines = [f"{i}. {e.title} ({e.created_at:%Y-%m-%d %H:%M})" for i, e in enumerate(entries, start=1)]
@@ -136,10 +136,10 @@ async def _build_reply(job: JobPayload) -> Reply:
         body = text[len("/note") :].strip()
         if not body:
             return Reply(text="Usage: /note <text>")
-        async with tenant_session(job.user_id) as session:
+        async with tenant_session(job.user_uuid) as session:
             entry = await create_entry(
                 session,
-                user_id=job.user_id,
+                user_id=job.user_uuid,
                 category=EntryCategory.personal,
                 kind=EntryKind.note,
                 title=body[:80],
@@ -151,12 +151,12 @@ async def _build_reply(job: JobPayload) -> Reply:
     # Zero-LLM-first fast path for "save X: Y" messages — falls back to a cheap LLM
     # extractor for messy phrasing, but a save/remember trigger always ends here (never the
     # general capture pipeline below). Returns None only if there's no trigger at all.
-    kv_reply = await kv_notes.try_handle_save(job.user_id, text, job.msg_id)
+    kv_reply = await kv_notes.try_handle_save(job.user_uuid, text, job.msg_id)
     if kv_reply is not None:
         return kv_reply
 
     # Phase 3: plain messages (no slash command, no KV match) route to LLM-driven capture.
-    return await agents.notes.handle(user_id=job.user_id, text=job.text, msg_id=job.msg_id)
+    return await agents.notes.handle(user_id=job.user_uuid, text=job.text, msg_id=job.msg_id)
 
 
 async def handle_message(ctx, payload: dict) -> None:

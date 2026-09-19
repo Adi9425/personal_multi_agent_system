@@ -199,6 +199,9 @@ class QueryPlan(BaseModel):
     search_text: str | None = None
     category: EntryCategory | None = None
     status: EntryStatus | None = None
+    kind: EntryKind | None = None   # added post-launch: without it, "pending task" and
+                                     # "what's open" returned identical rows — see
+                                     # query-kind-blindness-investigation.md
     due_before: datetime | None = None
     completed_after: datetime | None = None
     limit: int = 10
@@ -254,7 +257,7 @@ worked example and an "when genuinely unsure, prefer capture" tie-break rule.
 ```
 "what's open in office work"
   -> classify_intent() -> "query"
-  -> query.extract_plan()   Haiku -> QueryPlan(category=office_work, status=open, search_text=None)
+  -> query.extract_plan()   Haiku -> QueryPlan(category=office_work, status=open, kind=null, search_text=None)
   -> [no search_text -> skip embedding]
   -> services.search.hybrid_search(plan, query_embedding=None)
        SQL only: WHERE user_id=... AND category=... AND status=...
@@ -406,5 +409,16 @@ run in separate terminals (or as background tasks) — killing/restarting either
 - **`core/router.py`** — the cross-agent router stub. There is still only one agent (notes),
   so this would be a function with one hardcoded branch and no caller. Deferred until a
   second agent actually exists, per the HLD's own non-goals (§1.2).
+- **Indirect prompt-injection hardening for query synthesis** — `agents/notes/query.py:118-142`
+  interpolates retrieved entries' `body` text straight into the *system* prompt for the
+  answer-synthesis call (`f"Entries:\n{rows_summary}"`), with no delimiter and no "this is
+  data, not instructions" guardrail. A stored note whose body contains adversarial text (e.g.
+  pasted from a phishing email/webpage) sits in the same channel as the system instructions
+  for that one call. Bounded today — output is still constrained to `AnswerSynthesis`'s schema
+  and rows are already scoped to the requesting user via RLS/`user_id`, so worst case is a
+  manipulated answer string, not an action or cross-user leak — but not actually mitigated.
+  Fix: wrap `rows_summary` in an explicit delimiter (e.g. `<entries>...</entries>`) and add a
+  line telling the model content inside it is retrieved data to ignore as instructions. Not
+  started.
 - Everything in HLD §12 (reminders, short-term conversation memory, cross-domain recall,
   recurring entries, multi-user, voice capture) — explicitly v2, untouched.
